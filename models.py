@@ -14,6 +14,12 @@ class SessionMessage(BaseModel):
     content: dict
 
 class CreateSessionRequest(BaseModel):
+    """
+    Request model for creating a new session or resuming an existing one.
+    If session_id is provided, the manager will attempt to use it.
+    """
+    # ADDED: Optional session_id for resuming saved sessions from disk profile
+    session_id: Optional[str] = None 
     session_type: str = "whatsapp"
     config: Optional[dict] = None
     headless: Optional[bool] = False  # Default to GUI mode for testing

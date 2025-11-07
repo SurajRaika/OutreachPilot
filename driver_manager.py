@@ -5,48 +5,44 @@ from typing import Optional
 import os
 
 class DriverManager:
-    """Manages Chrome WebDriver instances"""
-
+    """Manages Chrome WebDriver instances with profile support"""
+    
+    BASE_PATH = "/home/suraj/chrome_selenium"
+    
     @staticmethod
-    def create_driver(session_id: str, headless: bool = False) -> webdriver.Chrome:
-        """Create a new Chrome driver with persistent session support"""
+    def create_driver(session_id: str, profile_name: str, headless: bool = False) -> webdriver.Chrome:
+        """Create Chrome driver with profile management"""
         chrome_options = webdriver.ChromeOptions()
-
-        # Optional headless mode
+        
         if headless:
-            chrome_options.add_argument("--headless=new")  # use new headless mode
-
-        # Essential stability flags for Linux
+            chrome_options.add_argument("--headless=new")
+        
         chrome_options.add_argument("--no-sandbox")
         chrome_options.add_argument("--disable-dev-shm-usage")
         chrome_options.add_argument("--disable-gpu")
-
-        # ✅ Persistent session directory
-        session_dir = f"/home/suraj/chrome_selenium/session_{session_id}"
+        
+        # Create profile-based session directory using encoded session_id
+        # Extract base_uuid from encoded_id for directory naming
+        base_uuid = session_id.split("||")[0] if "||" in session_id else session_id
+        session_dir = os.path.join(DriverManager.BASE_PATH, f"session_{base_uuid}_{profile_name}")
         os.makedirs(session_dir, exist_ok=True)
         chrome_options.add_argument(f"--user-data-dir={session_dir}")
-
-        # Optional: distinct profile name if you want multiple profiles inside same dir
         chrome_options.add_argument("--profile-directory=Default")
-
-        # Performance tweaks (disable images, notifications)
-        prefs = {
-            "profile.default_content_setting_values.notifications": 2
-        }
+        
+        prefs = {"profile.default_content_setting_values.notifications": 2}
         chrome_options.add_experimental_option("prefs", prefs)
-
-        # Start Chrome
+        
         driver = webdriver.Chrome(
             service=Service(ChromeDriverManager().install()),
             options=chrome_options
         )
-
+        
         driver.set_page_load_timeout(30)
         return driver
-
+    
     @staticmethod
     def safe_quit(driver: Optional[webdriver.Chrome]):
-        """Safely quit a driver instance"""
+        """Safely quit driver"""
         if driver:
             try:
                 driver.quit()

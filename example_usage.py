@@ -1,205 +1,241 @@
-import requests
-import time
-import uuid
+"""
+test_cli.py - Manual testing script for WhatsApp automation sessions
+Run this script to test session operations without FastAPI
+"""
+import asyncio
+import json
+from manager import session_manager, SessionManager
+from models import AgentType
 
-BASE_URL = "http://localhost:8000/api"
-resume_result = create_session(session_id=saved_session_id)
-if not resume_result['success']:
-    print("❌ Failed to resume session.")
-    return
+class Colors:
+    GREEN = '\033[92m'
+    BLUE = '\033[94m'
+    YELLOW = '\033[93m'
+    RED = '\033[91m'
+    END = '\033[0m'
 
-# -------------------------------
-# 🔹 Session Creation & Management
-# -------------------------------
-def create_session(session_id: str = None):
-    """Create a new automation session or resume an existing one."""
-    payload = {
-        "session_type": "whatsapp",
-        "config": {},
-        "headless": False
-    }
-    if session_id:
-        payload["session_id"] = session_id
-        print(f"Attempting to **RESUME** session with ID: {session_id}")
+def print_header(text):
+    print(f"\n{Colors.BLUE}{'='*60}")
+    print(f"  {text}")
+    print(f"{'='*60}{Colors.END}\n")
+
+def print_success(text):
+    print(f"{Colors.GREEN}✓ {text}{Colors.END}")
+
+def print_error(text):
+    print(f"{Colors.RED}✗ {text}{Colors.END}")
+
+def print_info(text):
+    print(f"{Colors.YELLOW}ℹ {text}{Colors.END}")
+
+async def test_create_session():
+    """Test creating new sessions"""
+    print_header("TEST 1: CREATE NEW SESSIONS")
+    
+    profiles = ["Account_1", "Business_Account", "Support_Team"]
+    session_ids = []
+    
+    for profile in profiles:
+        session_id = session_manager.create_session(profile_name=profile)
+        session_ids.append(session_id)
+        print_success(f"Created session: {session_id}")
+        print(f"  Profile: {profile}\n")
+    
+    return session_ids
+
+def test_list_active_sessions(session_ids):
+    """Test listing active sessions"""
+    print_header("TEST 2: LIST ACTIVE SESSIONS")
+    
+    sessions = session_manager.list_sessions()
+    print_info(f"Total active sessions: {len(sessions)}\n")
+    
+    for s in sessions:
+        print(f"Session ID: {s['session_id']}")
+        print(f"Profile Name: {s['profile_name']}")
+        print(f"Status: {s['status']}")
+        print(f"Has Driver: {s['has_driver']}")
+        print()
+
+def test_list_saved_profiles():
+    """Test listing saved profiles from disk"""
+    print_header("TEST 3: LIST SAVED PROFILES (DISK)")
+    
+    profiles = session_manager.list_saved_profiles()
+    
+    if not profiles:
+        print_info("No saved profiles on disk yet\n")
+        return
+    
+    print_info(f"Total saved profiles: {len(profiles)}\n")
+    
+    for p in profiles:
+        print(f"Session ID: {p['encoded_session_id']}")
+        print(f"Profile Name: {p['profile_name']}")
+        print(f"Is Active: {p['is_active']}")
+        print()
+
+def test_stop_session(session_id):
+    """Test stopping a session"""
+    print_header("TEST 4: STOP SESSION")
+    
+    print_info(f"Stopping session: {session_id}\n")
+    
+    if session_manager.stop_session(session_id):
+        print_success(f"Session stopped: {session_id}")
+        print_info("Profile saved to disk\n")
     else:
-        print("Attempting to **CREATE** new session.")
+        print_error(f"Failed to stop session: {session_id}\n")
 
-    response = requests.post(f"{BASE_URL}/sessions/create", json=payload)
-    print("Create/Resume response:", response.json())
-    return response.json()
+def test_pause_session(session_id):
+    """Test pausing a session"""
+    print_header("TEST 5: PAUSE SESSION")
+    
+    print_info(f"Pausing session: {session_id}\n")
+    
+    if session_manager.pause_session(session_id):
+        print_success(f"Session paused: {session_id}")
+        print_info("Driver closed, session in memory\n")
+    else:
+        print_error(f"Failed to pause session: {session_id}\n")
 
+def test_resume_session(session_id):
+    """Test resuming a paused session"""
+    print_header("TEST 6: RESUME PAUSED SESSION")
+    
+    print_info(f"Resuming session: {session_id}\n")
+    
+    if session_manager.resume_session(session_id):
+        print_success(f"Session resumed: {session_id}\n")
+    else:
+        print_error(f"Failed to resume session: {session_id}\n")
 
-def list_saved_sessions():
-    """List saved sessions from disk (/sessions_list)"""
-    response = requests.get(f"{BASE_URL}/sessions_list")
-    print("Saved sessions (disk) response:", response.json())
-    return response.json()
-
-
-def list_active_sessions():
-    """List currently active sessions in memory (/sessions/list)"""
-    response = requests.get(f"{BASE_URL}/sessions/list")
-    print("Active sessions (memory) response:", response.json())
-    return response.json()
-
-
-def get_session_from_saved():
-    """Get the first saved session ID that is not currently active"""
-    sessions = list_saved_sessions()
-    if "sessions" in sessions and sessions["sessions"]:
-        # Find one that is not active to test resumption cleanly
-        for sess in sessions["sessions"]:
-            if not sess.get("is_active", False):
-                 print(f"✅ Found saved (inactive) session ID: {sess['session_id']}")
-                 return sess["session_id"]
-
-        # If all are active, just take the first one
-        print(f"⚠️ All saved sessions are active. Using first ID: {sessions['sessions'][0]['session_id']}")
-        return sessions["sessions"][0]["session_id"]
-
-    print("⚠️ No saved sessions found.")
-    return None
-
-
-def get_session_from_active():
-    """Get the first active session ID"""
-    sessions = list_active_sessions()
-    if "sessions" in sessions and sessions["sessions"]:
-        # Depends on what session_manager.list_sessions() returns — assume list of dicts
-        sess = sessions["sessions"][0]
-        return sess["session_id"]
-    print("⚠️ No active sessions found.")
-    return None
-
-
-# -------------------------------
-# 🔹 Session Actions
-# -------------------------------
-
-def init_driver(session_id):
-    """Initialize browser driver for a session (must be called after create/resume)"""
-    response = requests.post(f"{BASE_URL}/sessions/{session_id}/init-driver")
-    print("Init driver response:", response.json())
-    return response.json()
-
-
-def navigate_to_whatsapp(session_id):
-    """Navigate to WhatsApp Web (init handled separately)"""
-    response = requests.post(
-        f"{BASE_URL}/sessions/{session_id}/actions/navigate",
-        params={"url": "https://web.whatsapp.com"}
+def test_resume_from_disk(encoded_session_id):
+    """Test resuming a saved session from disk"""
+    print_header("TEST 7: RESUME FROM DISK")
+    
+    base_uuid, profile_name = SessionManager.decode_session_id(encoded_session_id)
+    print_info(f"Resuming from disk:")
+    print(f"  Session ID: {encoded_session_id}")
+    print(f"  Profile Name: {profile_name}\n")
+    
+    session_id = session_manager.create_session(
+        profile_name=profile_name,
+        session_id=encoded_session_id
     )
-    print("Navigate response:", response.json())
-    return response.json()
-
-
-def get_qr_code(session_id):
-    """Fetch WhatsApp QR code (base64 data)"""
-    response = requests.get(f"{BASE_URL}/sessions/{session_id}/whatsapp/qr-code")
-    print("QR Code response:", response.json())
-    return response.json()
-
-
-def get_session_info(session_id):
-    """Get info about a session"""
-    response = requests.get(f"{BASE_URL}/sessions/{session_id}")
-    print("Session info:", response.json())
-    return response.json()
-
-
-def stop_session(session_id):
-    """Stop the current session (closes browser, profile stays on disk)"""
-    response = requests.post(f"{BASE_URL}/sessions/{session_id}/stop")
-    print("Stop response:", response.json())
-    return response.json()
-
-
-def delete_session(session_id):
-    """Delete a specific session (removes from memory and closes driver)"""
-    response = requests.delete(f"{BASE_URL}/sessions/{session_id}")
-    print("Delete response:", response.json())
-    return response.json()
-
-
-# -------------------------------
-# 🧪 Test Scenarios
-# -------------------------------
-
-def test_full_cycle():
-    """Test a full create -> navigate -> stop cycle"""
-    print("--- Test Full Session Cycle (Create & Save) ---")
     
-    # 1. Create a new session
-    create_result = create_session()
-    session_id = create_result['data']['session_id']
-    if not session_id:
-        print("❌ Failed to create session.")
+    print_success(f"Session resumed from disk: {session_id}\n")
+    return session_id
+
+def test_delete_session(session_id):
+    """Test deleting a session"""
+    print_header("TEST 8: DELETE SESSION")
+    
+    print_info(f"Deleting session: {session_id}\n")
+    
+    if session_manager.delete_session(session_id):
+        print_success(f"Session deleted: {session_id}\n")
+    else:
+        print_error(f"Failed to delete session: {session_id}\n")
+
+def test_get_session_info(session_id):
+    """Test getting session info"""
+    print_header("TEST 9: GET SESSION INFO")
+    
+    session = session_manager.get_session(session_id)
+    if not session:
+        print_error(f"Session not found: {session_id}\n")
         return
     
-    # 2. Initialize driver (a new Chrome window opens)
-    init_driver(session_id)
-    
-    # 3. Navigate to WhatsApp
-    navigate_to_whatsapp(session_id)
-    # At this point, you would scan the QR code to save login data to disk
-    print(f"\n💡 Session {session_id} is active. If a QR code is shown, scan it now to save your login state to disk.")
-    time.sleep(3) # Wait for a moment
-    
-    # 4. Stop the session (closes browser, profile remains on disk)
-    print("\n4. Stopping session (profile saved)...")
-    stop_session(session_id) 
-    
-    # 5. List sessions to confirm it's no longer active but should be saved
-    print("\n5. Listing active sessions after stopping:")
-    list_active_sessions() 
+    info = session.get_info()
+    print(json.dumps(info, indent=2))
+    print()
 
-def test_resume_cycle():
-    """Test resuming a session that was previously stopped (and thus saved to disk)"""
-    print("\n--- Test Session Resume Cycle ---")
-
-    # A. Look for a session saved on disk that is currently inactive
-    saved_session_id = get_session_from_saved()
-
-    if not saved_session_id:
-        print("❌ Cannot proceed with resume test: No saved sessions found or all are active.")
+async def test_agents(session_id):
+    """Test agent enable/disable"""
+    print_header("TEST 10: TEST AGENTS")
+    
+    session = session_manager.get_session(session_id)
+    if not session:
+        print_error(f"Session not found: {session_id}\n")
         return
     
-    # B. Resume the session (loads object into memory using the old ID)
-    resume_result = create_session(session_id=saved_session_id)
-    if not resume_result['success']:
-        print("❌ Failed to resume session.")
-        return
-
-    # C. Initialize the driver (this loads the persistent profile from disk)
-    print("\nC. Initializing driver on resumed session (opens Chrome window with old state)...")
-    init_driver(saved_session_id)
+    # Enable autoreply agent
+    print_info("Enabling autoreply agent...")
+    await session.enable_agent(AgentType.AUTOREPLY)
+    print_success("Autoreply agent enabled\n")
     
-    # D. Navigate again - if the login was saved, it should immediately be logged in.
-    print("D. Navigating to WhatsApp. Should load saved session state.")
-    navigate_to_whatsapp(saved_session_id)
-
-    print("\n✅ Resume Test Complete. Check the browser window to see if the session was loaded correctly.")
-    time.sleep(5)
+    # Check status
+    statuses = session.get_agent_statuses()
+    print(f"Agent statuses: {json.dumps(statuses, indent=2)}\n")
     
-    # E. Stop and delete the resumed session
-    print("\nE. Stopping and deleting resumed session.")
-    stop_session(saved_session_id)
-    delete_session(saved_session_id)
+    # Pause autoreply agent
+    print_info("Pausing autoreply agent...")
+    await session.pause_agent(AgentType.AUTOREPLY)
+    print_success("Autoreply agent paused\n")
+    
+    # Resume autoreply agent
+    print_info("Resuming autoreply agent...")
+    await session.resume_agent(AgentType.AUTOREPLY)
+    print_success("Autoreply agent resumed\n")
+    
+    # Disable autoreply agent
+    print_info("Disabling autoreply agent...")
+    await session.disable_agent(AgentType.AUTOREPLY)
+    print_success("Autoreply agent disabled\n")
 
-
-def main():
-    print("Starting example usage. Please ensure the FastAPI server is running.")
+async def main():
+    """Main test runner"""
+    print(f"\n{Colors.BLUE}")
+    print("  ╔══════════════════════════════════════════════════════════╗")
+    print("  ║     WhatsApp Automation - Manual Testing Suite          ║")
+    print("  ╚══════════════════════════════════════════════════════════╝")
+    print(f"{Colors.END}\n")
+    
+    try:
+        # Test 1: Create sessions
+        session_ids = await test_create_session()
         
-    # List existing profiles on disk
-    
-
-    
-    # Attempt to resume the session created in the full cycle
-    test_resume_cycle()
-
-    print("\nCleanup check:")
-    list_active_sessions()
-
+        # Test 2: List active
+        test_list_active_sessions(session_ids)
+        
+        # Test 3: List saved (will be empty on first run)
+        test_list_saved_profiles()
+        
+        # Test 4: Get session info
+        test_get_session_info(session_ids[0])
+        
+        # Test 5: Pause session
+        test_pause_session(session_ids[1])
+        
+        # Test 6: Resume paused session
+        test_resume_session(session_ids[1])
+        
+        # Test 7: Stop session (saves to disk)
+        test_stop_session(session_ids[0])
+        
+        # Test 8: List saved profiles again (should show stopped session)
+        test_list_saved_profiles()
+        
+        # Test 9: Resume from disk
+        saved_profiles = session_manager.list_saved_profiles()
+        if saved_profiles:
+            resumed_id = await test_resume_from_disk(saved_profiles[0]['encoded_session_id'])
+            await test_agents(resumed_id)
+        
+        # Test 10: Delete session
+        test_delete_session(session_ids[2])
+        
+        # Final: List active sessions
+        print_header("FINAL: LIST ALL ACTIVE SESSIONS")
+        test_list_active_sessions([])
+        
+        print_success("All tests completed!")
+        
+    except Exception as e:
+        print_error(f"Test failed with error: {str(e)}")
+        import traceback
+        traceback.print_exc()
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())

@@ -5,49 +5,80 @@ from models import CreateSessionRequest, SessionActionRequest, SessionResponse, 
 from manager import session_manager
 from automation_actions import AutomationActions
 import os
+from manager import session_manager, SessionManager
+from models import SessionStatus, AgentType
+import asyncio
 
 router = APIRouter()
 
-# Session Management
+
 @router.post("/sessions/create", response_model=SessionResponse)
 async def create_session(request: CreateSessionRequest):
-    """Create new or resume saved session from disk"""
+    """Create a new session with profile name and auto-initialize driver"""
     try:
-        # For resuming: if session_id provided, extract profile_name from it
-        profile_name = request.profile_name
-        session_id = request.session_id
-        
-        if session_id and not profile_name:
-            # Resuming from disk: extract profile_name from session_id
-            base_uuid, extracted_profile = SessionManager.decode_session_id(session_id)
-            profile_name = extracted_profile
-        
-        if not profile_name:
-            raise HTTPException(status_code=400, detail="profile_name required for new sessions")
-        
+        # Step 1: Create the session
         session_id = session_manager.create_session(
-            profile_name=profile_name,
-            session_id=session_id,
+            profile_name=request.profile_name,
             session_type=request.session_type,
             config=request.config
         )
-        
+
         session = session_manager.get_session(session_id)
         session.config['headless'] = request.headless
-        
+
+        # Step 2: Call init_driver route programmatically
+        # We directly call the same function defined for /sessions/{session_id}/init-driver
+        init_result = await init_driver(session_id)
+
         return SessionResponse(
             success=True,
-            message=f"Profile '{profile_name}' created/loaded",
-            data={"session_id": session_id, "profile_name": profile_name}
+            message=f"Session created with profile '{request.profile_name}' "
+                    f"and driver initialized: {init_result['message']}",
+            data={"session_id": session_id, "profile_name": request.profile_name}
         )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/sessions/resume", response_model=SessionResponse)
+async def resume_session(session_id: str, headless: bool = False):
+    """Resume a saved session from disk and auto-initialize driver"""
+    try:
+        base_uuid, profile_name = SessionManager.decode_session_id(session_id)
+        if not profile_name:
+            raise HTTPException(status_code=400, detail="Invalid session_id format")
+
+        # Step 1: Resume session
+        resumed_id = session_manager.create_session(
+            profile_name=profile_name,
+            session_id=session_id,
+            session_type="whatsapp"
+        )
+
+        session = session_manager.get_session(resumed_id)
+        session.config['headless'] = headless
+
+        # Step 2: Call init_driver route programmatically
+        init_result = await init_driver(resumed_id)
+
+        return SessionResponse(
+            success=True,
+            message=f"Session resumed with profile '{profile_name}' "
+                    f"and driver initialized: {init_result['message']}",
+            data={"session_id": resumed_id, "profile_name": profile_name}
+        )
+
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+
+
+
 @router.post("/sessions/{session_id}/init-driver")
 async def init_driver(session_id: str):
-    """Initialize browser driver"""
+    """Initialize browser driver and open WhatsApp Web in background"""
     session = session_manager.get_session(session_id)
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
@@ -58,8 +89,26 @@ async def init_driver(session_id: str):
     headless = session.config.get('headless', False)
     if session.create_driver(headless=headless):
         session.status = SessionStatus.ACTIVE
-        return {"success": True, "message": "Driver initialized", "profile": session.profile_name}
-    
+
+        try:
+            session.driver.get("about:blank")
+        except Exception as e:
+            # Don’t fail initialization if tab opening fails — just log or warn
+            return {
+                "success": True,
+                "message": f"Driver initialized, but failed to open tab: {str(e)}",
+                "profile": session.profile_name
+            }
+
+        # ✅ Kick off WhatsApp init in background, don’t wait for it
+        asyncio.create_task(AutomationActions.initialize(session, "https://web.whatsapp.com"))
+
+        return {
+            "success": True,
+            "message": "Driver initialized; WhatsApp initialization started in background",
+            "profile": session.profile_name
+        }
+
     raise HTTPException(status_code=500, detail="Failed to initialize driver")
 
 @router.post("/sessions/{session_id}/pause")
@@ -69,12 +118,6 @@ async def pause_session(session_id: str):
         return SessionResponse(success=True, message="Session paused (browser closed)")
     raise HTTPException(status_code=404, detail="Session not found")
 
-@router.post("/sessions/{session_id}/resume")
-async def resume_session(session_id: str):
-    """Resume paused session"""
-    if session_manager.resume_session(session_id):
-        return SessionResponse(success=True, message="Session resumed")
-    raise HTTPException(status_code=404, detail="Session not found or not paused")
 
 @router.post("/sessions/{session_id}/stop")
 async def stop_session(session_id: str):
@@ -127,19 +170,19 @@ async def get_messages(session_id: str, since: Optional[str] = Query(None)):
         raise HTTPException(status_code=404, detail="Session not found")
     return {"messages": session.get_messages(since=since)}
 
-# Actions
-@router.post("/sessions/{session_id}/actions/navigate")
-async def navigate(session_id: str, url: str):
-    """Navigate to URL"""
-    session = session_manager.get_session(session_id)
-    if not session:
-        raise HTTPException(status_code=404, detail="Session not found")
+# # Actions
+# @router.post("/sessions/{session_id}/actions/navigate")
+# async def navigate(session_id: str, url: str):
+#     """Navigate to URL"""
+#     session = session_manager.get_session(session_id)
+#     if not session:
+#         raise HTTPException(status_code=404, detail="Session not found")
     
-    if not session.driver:
-        raise HTTPException(status_code=400, detail="Driver not initialized")
+#     if not session.driver:
+#         raise HTTPException(status_code=400, detail="Driver not initialized")
     
-    result = await AutomationActions.initialize(session, url, session.config.get('headless', False))
-    return SessionResponse(success=result.get("success", False), message="Navigation complete", data=result)
+#     result = await AutomationActions.initialize(session, url, session.config.get('headless', False))
+#     return SessionResponse(success=result.get("success", False), message="Navigation complete", data=result)
 
 @router.post("/sessions/{session_id}/whatsapp/init")
 async def init_whatsapp(session_id: str):
@@ -148,7 +191,7 @@ async def init_whatsapp(session_id: str):
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
     
-    result = await AutomationActions.initialize(session, "https://web.whatsapp.com", session.config.get('headless', False))
+    result = await AutomationActions.initialize(session, "https://web.whatsapp.com")
     return result
 
 @router.get("/sessions/{session_id}/whatsapp/qr-code")
@@ -158,7 +201,7 @@ async def get_qr_code(session_id: str):
     if not session or not session.driver:
         raise HTTPException(status_code=400, detail="Session/driver not ready")
     
-    result = await AutomationActions.get_qr_code(session)
+    result = await AutomationActions.get_qr_code_if_logout(session)
     return result
 
 # Agent Management
@@ -244,84 +287,4 @@ async def send_message_route(session_id: str, contact: str, message: str):
         raise HTTPException(status_code=400, detail="Session/driver not ready")
     
     result = await AutomationActions.send_message(session, contact, message)
-    return result
-
-@router.post("/sessions/{session_id}/actions/click")
-async def click_route(session_id: str, selector: str, selector_type: str = "css"):
-    """Click element"""
-    session = session_manager.get_session(session_id)
-    if not session or not session.driver:
-        raise HTTPException(status_code=400, detail="Session/driver not ready")
-    
-    result = await AutomationActions.click_element(session, selector, selector_type)
-    return result
-
-@router.post("/sessions/{session_id}/actions/type")
-async def type_route(session_id: str, selector: str, text: str, selector_type: str = "css"):
-    """Type text"""
-    session = session_manager.get_session(session_id)
-    if not session or not session.driver:
-        raise HTTPException(status_code=400, detail="Session/driver not ready")
-    
-    result = await AutomationActions.type_text(session, selector, text, selector_type)
-    return result
-
-@router.get("/sessions/{session_id}/actions/extract-text")
-async def extract_text_route(session_id: str, selector: str, selector_type: str = "css"):
-    """Extract text from element"""
-    session = session_manager.get_session(session_id)
-    if not session or not session.driver:
-        raise HTTPException(status_code=400, detail="Session/driver not ready")
-    
-    result = await AutomationActions.extract_text(session, selector, selector_type)
-    return result
-
-@router.get("/sessions/{session_id}/actions/extract-multiple")
-async def extract_multiple_route(session_id: str, selector: str, selector_type: str = "css"):
-    """Extract from multiple elements"""
-    session = session_manager.get_session(session_id)
-    if not session or not session.driver:
-        raise HTTPException(status_code=400, detail="Session/driver not ready")
-    
-    result = await AutomationActions.extract_multiple(session, selector, selector_type)
-    return result
-
-@router.post("/sessions/{session_id}/actions/wait")
-async def wait_route(session_id: str, selector: str, timeout: int = 10, selector_type: str = "css"):
-    """Wait for element"""
-    session = session_manager.get_session(session_id)
-    if not session or not session.driver:
-        raise HTTPException(status_code=400, detail="Session/driver not ready")
-    
-    result = await AutomationActions.wait_element(session, selector, timeout, selector_type)
-    return result
-
-@router.post("/sessions/{session_id}/actions/scroll")
-async def scroll_route(session_id: str, direction: str = "down", amount: int = 3):
-    """Scroll page"""
-    session = session_manager.get_session(session_id)
-    if not session or not session.driver:
-        raise HTTPException(status_code=400, detail="Session/driver not ready")
-    
-    result = await AutomationActions.scroll(session, direction, amount)
-    return result
-
-@router.get("/sessions/{session_id}/actions/page-source")
-async def page_source_route(session_id: str):
-    """Get page HTML"""
-    session = session_manager.get_session(session_id)
-    if not session or not session.driver:
-        raise HTTPException(status_code=400, detail="Session/driver not ready")
-    
-    result = await AutomationActions.get_page_source(session)
-    return result
-
-@router.post("/sessions/{session_id}/actions/execute-script")
-async def execute_script_route(session_id: str, script: str):
-    """Execute JavaScript"""
-    session = session_manager.get_session(session_id)
-    if not session or not session.driver:
-        raise HTTPException(status_code=400, detail="Session/driver not ready")
-    
-    result = await AutomationActions.execute_script(session, script)
     return result

@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import os
 from routes import router
+from fastapi.staticfiles import StaticFiles
 
 app = FastAPI(
     title="WhatsApp Automation API",
@@ -18,6 +19,27 @@ app.add_middleware(
 )
 
 app.include_router(router, prefix="/api", tags=["automation"])
+
+
+
+
+
+
+
+
+ui_path = os.path.join(os.path.dirname(__file__), "ui")
+
+if os.path.exists(ui_path):
+    app.mount("/ui", StaticFiles(directory=ui_path), name="ui")
+
+    @app.get("/ui", include_in_schema=False)
+    async def serve_ui():
+        """Serve the UI's main HTML file"""
+        return FileResponse(os.path.join(ui_path, "index.html"))
+else:
+    print("⚠️ UI folder not found. Skipping UI mount.")
+
+
 
 @app.get("/")
 async def root():

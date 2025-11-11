@@ -23,8 +23,7 @@ class DriverManager:
         
         # Create profile-based session directory using encoded session_id
         # Extract base_uuid from encoded_id for directory naming
-        base_uuid = session_id.split("||")[0] if "||" in session_id else session_id
-        session_dir = os.path.join(DriverManager.BASE_PATH, f"session_{base_uuid}_{profile_name}")
+        session_dir = os.path.join(DriverManager.BASE_PATH, f"session_{session_id}")
         os.makedirs(session_dir, exist_ok=True)
         chrome_options.add_argument(f"--user-data-dir={session_dir}")
         chrome_options.add_argument("--profile-directory=Default")

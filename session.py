@@ -1,72 +1,12 @@
 import asyncio
 from datetime import datetime
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, TYPE_CHECKING
 from selenium import webdriver
 from models import SessionStatus, SessionMessage, AgentType, AgentStatus
 from driver_manager import DriverManager
 
-class Agent:
-    """Base agent class"""
-    def __init__(self, agent_type: AgentType, config: dict = None):
-        self.agent_type = agent_type
-        self.config = config or {}
-        self.status = AgentStatus.DISABLED
-        self.task: Optional[asyncio.Task] = None
-        self.error: Optional[str] = None
-    
-    async def start(self):
-        """Start the agent"""
-        try:
-            self.status = AgentStatus.ENABLED
-            self.task = asyncio.create_task(self._run())
-        except Exception as e:
-            self.error = str(e)
-            self.status = AgentStatus.ERROR
-    
-    async def stop(self):
-        """Stop the agent"""
-        if self.task and not self.task.done():
-            self.task.cancel()
-        self.status = AgentStatus.DISABLED
-        self.task = None
-    
-    async def pause(self):
-        """Pause agent execution"""
-        self.status = AgentStatus.DISABLED
-    
-    async def resume(self):
-        """Resume agent execution"""
-        self.status = AgentStatus.ENABLED
-    
-    async def _run(self):
-        """Override in subclass"""
-        pass
-
-class AutoReplyAgent(Agent):
-    """Handles automatic replies to messages"""
-    async def _run(self):
-        while self.status == AgentStatus.ENABLED:
-            try:
-                # Placeholder: Add your autoreply logic here
-                await asyncio.sleep(5)
-            except asyncio.CancelledError:
-                break
-            except Exception as e:
-                self.error = str(e)
-                self.status = AgentStatus.ERROR
-
-class AutoOutreachAgent(Agent):
-    """Handles automatic outreach campaigns"""
-    async def _run(self):
-        while self.status == AgentStatus.ENABLED:
-            try:
-                # Placeholder: Add your outreach logic here
-                await asyncio.sleep(10)
-            except asyncio.CancelledError:
-                break
-            except Exception as e:
-                self.error = str(e)
-                self.status = AgentStatus.ERROR
+if TYPE_CHECKING:
+    from agents import BaseAgent
 
 class AutomationSession:
     """Represents a single WhatsApp automation session"""
@@ -80,14 +20,27 @@ class AutomationSession:
         self.created_at = datetime.now().isoformat()
         self.driver: Optional[webdriver.Chrome] = None
         self.messages: List[SessionMessage] = []
-        self.max_messages = 100
+        self.max_messages = 20
         self.metadata = {}
         
-        # Agent management
-        self.agents: Dict[AgentType, Agent] = {
-            AgentType.AUTOREPLY: AutoReplyAgent(AgentType.AUTOREPLY),
-            AgentType.AUTO_OUTREACH: AutoOutreachAgent(AgentType.AUTO_OUTREACH),
-        }
+        # Agent management - initialize as empty dict
+        # Agents will be created lazily when first enabled
+        self.agents: Dict[AgentType, "BaseAgent"] = {}
+    
+    def _get_or_create_agent(self, agent_type: AgentType) -> "BaseAgent":
+        """Get existing agent or create new one"""
+        if agent_type not in self.agents:
+            # Import here to avoid circular dependency
+            from agents import AutoReplyAgent, AutoOutreachAgent
+            
+            if agent_type == AgentType.AUTOREPLY:
+                self.agents[agent_type] = AutoReplyAgent(self)
+            elif agent_type == AgentType.AUTO_OUTREACH:
+                self.agents[agent_type] = AutoOutreachAgent(self)
+            else:
+                raise ValueError(f"Unknown agent type: {agent_type}")
+        
+        return self.agents[agent_type]
     
     def create_driver(self, headless: bool = False):
         """Initialize Chrome driver"""
@@ -108,8 +61,15 @@ class AutomationSession:
             content=content
         )
         self.messages.append(message)
+
+        # Keep message count within limit
         if len(self.messages) > self.max_messages:
             self.messages = self.messages[-self.max_messages:]
+
+        # Print the new message in red
+        RED = "\033[91m"
+        RESET = "\033[0m"
+        print(f"{RED}[NEW MESSAGE] {message}{RESET}")
     
     def get_messages(self, since: Optional[str] = None, limit: int = 50) -> List[SessionMessage]:
         """Get messages"""
@@ -120,16 +80,18 @@ class AutomationSession:
     
     async def enable_agent(self, agent_type: AgentType, config: dict = None):
         """Enable an agent"""
-        if agent_type not in self.agents:
+        try:
+            agent = self._get_or_create_agent(agent_type)
+            
+            if config:
+                agent.config = config
+            
+            await agent.start()
+            self.add_message("log", {"message": f"Agent {agent_type.value} enabled"})
+            return True
+        except Exception as e:
+            self.add_message("error", {"message": f"Failed to enable agent {agent_type.value}: {str(e)}"})
             return False
-        
-        agent = self.agents[agent_type]
-        if config:
-            agent.config = config
-        
-        await agent.start()
-        self.add_message("log", {"message": f"Agent {agent_type.value} enabled"})
-        return True
     
     async def disable_agent(self, agent_type: AgentType):
         """Disable an agent"""
@@ -163,7 +125,15 @@ class AutomationSession:
     
     def get_agent_statuses(self) -> Dict[str, str]:
         """Get all agent statuses"""
-        return {agent_type.value: agent.status.value for agent_type, agent in self.agents.items()}
+        statuses = {}
+        for agent_type in AgentType:
+            if agent_type == AgentType.NONE:
+                continue
+            if agent_type in self.agents:
+                statuses[agent_type.value] = self.agents[agent_type].status.value
+            else:
+                statuses[agent_type.value] = AgentStatus.DISABLED.value
+        return statuses
     
     def get_info(self) -> dict:
         """Get session info"""
@@ -184,8 +154,24 @@ class AutomationSession:
         self.metadata[key] = value
         self.add_message("metadata", {"key": key, "value": value})
     
+    async def cleanup_agents(self):
+        """Stop all agents before cleanup"""
+        for agent in self.agents.values():
+            await agent.stop()
+    
     def cleanup(self):
         """Clean up resources"""
+        # Stop all agents first
+        if self.agents:
+            try:
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    asyncio.create_task(self.cleanup_agents())
+                else:
+                    loop.run_until_complete(self.cleanup_agents())
+            except Exception as e:
+                print(f"Error stopping agents during cleanup: {e}")
+        
         DriverManager.safe_quit(self.driver)
         self.driver = None
         self.status = SessionStatus.STOPPED

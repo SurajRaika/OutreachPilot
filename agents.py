@@ -1,9 +1,7 @@
-"""
-agents.py - WhatsApp automation agents
-"""
 import asyncio
 from enum import Enum
 from typing import Optional, Dict, TYPE_CHECKING
+import google.generativeai as genai
 
 if TYPE_CHECKING:
     from session import AutomationSession
@@ -57,50 +55,186 @@ class BaseAgent:
 
 class AutoReplyAgent(BaseAgent):
     """
-    Handles automatic replies to incoming messages
+    Handles automatic replies to incoming messages using Gemini API
     
     Config example:
     {
         "reply_delay": 2,
-        "reply_message": "Thanks for your message!",
         "check_interval": 5,
-        "target_contacts": ["contact1", "contact2"]
+        "target_contacts": ["contact1", "contact2"],
+        "gemini_api_key": "your-api-key",
+        "system_instruction": "You are a helpful WhatsApp bot. Keep responses concise and friendly.",
+        "model": "gemini-1.5-flash"
     }
     """
     
     def __init__(self, session: "AutomationSession", config: dict = None):
         super().__init__(AgentType.AUTOREPLY, config)
         self.session = session
+        self.model = None
+        self._initialize_gemini()
+    
+    def _initialize_gemini(self):
+        """Initialize Gemini API with configuration"""
+        api_key = self.config.get("gemini_api_key")
+        model_name = self.config.get("model", "gemini-1.5-flash")
+        
+        if not api_key:
+            raise ValueError("gemini_api_key is required in config")
+        
+        genai.configure(api_key=api_key)
+        self.model = genai.GenerativeModel(model_name)
+    
+    async def _generate_reply(self, incoming_message: str) -> str:
+        """
+        Generate a reply using Gemini API based on incoming message and system instruction
+        """
+        try:
+            system_instruction = self.config.get(
+                "system_instruction", 
+                "You are a helpful WhatsApp assistant. Keep responses concise and friendly."
+            )
+            
+            # Create the prompt with system instruction context
+            prompt = f"""System Instruction: {system_instruction}
+
+                Incoming Message: {incoming_message}
+
+                Generate an appropriate reply based on the system instruction. Keep the response concise for WhatsApp (under 1000 characters)."""
+            
+            # Call Gemini API
+            response = self.model.generate_content(prompt)
+            reply_text = response.text.strip()
+            
+            return reply_text
+        
+        except Exception as e:
+            self.session.add_message("error", {
+                "agent": "autoreply",
+                "action": "generate_reply",
+                "error": str(e)
+            })
+            # Fallback reply if Gemini fails
+            return "Thanks for your message! I'll get back to you soon."
     
     async def _run(self):
-        """Run autoreply agent"""
+        self.session.add_message("status", {"message": "AutoReplyAgent Intisted but not running"})
+        """Main loop: checks unread chats and replies using Gemini API."""
         try:
             reply_delay = self.config.get("reply_delay", 2)
-            reply_message = self.config.get("reply_message", "Thanks for reaching out!")
             check_interval = self.config.get("check_interval", 5)
-            target_contacts = self.config.get("target_contacts", [])
-            
+
             self.session.add_message("log", {
                 "agent": "autoreply",
                 "event": "started",
                 "config": {
-                    "reply_message": reply_message,
+                    "model": self.config.get("model", "gemini-1.5-flash"),
                     "reply_delay": reply_delay,
-                    "target_contacts": target_contacts
+                    "check_interval": check_interval,
+                    "system_instruction": self.config.get("system_instruction", "")
                 }
             })
-            
-            while self.status == AgentStatus.ENABLED:
+
+            from automation_actions import AutomationActions
+
+            while True:
+                # 🟡 Check if paused or disabled before every iteration
+                if self.status != AgentStatus.ENABLED:
+                    await asyncio.sleep(0.5)
+                    continue
+
                 try:
-                    # TODO: Add your message detection logic here
-                    await asyncio.sleep(check_interval)
-                    self.session.add_message("log", {
+                    # 🔍 Step 1: Find unread chats
+                    result = await AutomationActions.open_unread_chats(self.session)
+
+                    # Check pause state before processing results
+                    if self.status != AgentStatus.ENABLED:
+                        continue
+
+                    if not result.get("success"):
+                        # ❌ Driver or list error
+                        self.session.add_message("error", {
                             "agent": "autoreply",
-                            "event": "running1......"
-                           
+                            "action": "open_unread_chats",
+                            "error": result.get("error")
+                        })
+                        await asyncio.sleep(check_interval)
+                        continue
+
+                    # ✅ Case 1: No unread chats
+                    if result.get("message") == "No unread chats found" or result.get("total_unread", 0) == 0:
+                        self.session.add_message("log", {
+                            "agent": "autoreply",
+                            "event": "no_unread_chats"
                         })
 
-                                
+                        await asyncio.sleep(check_interval)
+                        continue
+
+                    # ✅ Case 2: There are unread chats
+                    opened_chats = result.get("opened_chats", [])
+                    self.session.add_message("log", {
+                        "agent": "autoreply",
+                        "event": "found_unread_chats",
+                        "count": len(opened_chats)
+                    })
+                    self.session.add_message("status", {"message": "unread chat Found and Opening "})
+
+
+                    for chat_info in opened_chats:
+                        if self.status != AgentStatus.ENABLED:
+                            break
+
+                        try:
+                            contact = chat_info.get("contact") or chat_info.get("name") or "Unknown"
+                            number = chat_info.get("number")
+                            incoming_message = chat_info.get("message", "")
+                            
+
+
+                            # Wait a bit before replying (respect delay)
+                            for _ in range(int(reply_delay * 10)):  # check every 0.1s
+                                if self.status != AgentStatus.ENABLED:
+                                    break
+                                await asyncio.sleep(0.1)
+                            if self.status != AgentStatus.ENABLED:
+                                break
+                            self.session.add_message("status", {"message": "Generating Reply ......."})
+
+                            # 🤖 Step 2: Generate reply using Gemini API
+                            reply_message = await self._generate_reply(incoming_message)
+
+                            # 💬 Step 3: Send and close chat
+                            self.session.add_message("status", {"message": "Writing the msg .......&{{reply_message}}"})
+
+                            send_result = await AutomationActions.SendAndCloseChat(
+                                self.session,  reply_message
+                            )
+
+                            self.session.add_message("log", {
+                                "agent": "autoreply",
+                                "action": "reply_sent",
+                                "contact": contact,
+                                "number": number,
+                                "incoming_message": incoming_message,
+                                "generated_reply": reply_message,
+                                "result": send_result
+                            })
+
+                        except Exception as e:
+                            self.session.add_message("error", {
+                                "agent": "autoreply",
+                                "action": "reply_chat",
+                                "error": str(e)
+                            })
+                            continue
+
+                    # 🕒 Wait between cycles with pause-awareness
+                    for _ in range(int(check_interval * 10)):  # check every 0.1s
+                        if self.status != AgentStatus.ENABLED:
+                            break
+                        await asyncio.sleep(0.1)
+
                 except asyncio.CancelledError:
                     break
                 except Exception as e:
@@ -111,7 +245,7 @@ class AutoReplyAgent(BaseAgent):
                         "error": str(e)
                     })
                     await asyncio.sleep(5)
-        
+
         except asyncio.CancelledError:
             pass
         finally:
@@ -119,33 +253,7 @@ class AutoReplyAgent(BaseAgent):
                 "agent": "autoreply",
                 "event": "stopped"
             })
-    
-    async def send_autoreply(self, contact: str, message: str):
-        """Send autoreply to contact"""
-        try:
-            # Import here to avoid circular dependency
-            from automation_actions import AutomationActions
-            
-            delay = self.config.get("reply_delay", 2)
-            await asyncio.sleep(delay)
-            
-            result = await AutomationActions.send_message(self.session, contact, message)
-            
-            self.session.add_message("log", {
-                "agent": "autoreply",
-                "action": "message_sent",
-                "contact": contact,
-                "success": result.get("success")
-            })
-            
-            return result
-        except Exception as e:
-            self.session.add_message("error", {
-                "agent": "autoreply",
-                "action": "send_autoreply",
-                "error": str(e)
-            })
-            raise
+
 
 class AutoOutreachAgent(BaseAgent):
     """

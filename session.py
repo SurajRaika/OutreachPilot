@@ -8,6 +8,14 @@ from driver_manager import DriverManager
 if TYPE_CHECKING:
     from agents import BaseAgent
 
+
+
+
+
+
+
+
+
 class AutomationSession:
     """Represents a single WhatsApp automation session"""
     
@@ -34,7 +42,13 @@ class AutomationSession:
             from agents import AutoReplyAgent, AutoOutreachAgent
             
             if agent_type == AgentType.AUTOREPLY:
-                self.agents[agent_type] = AutoReplyAgent(self)
+                self.agents[agent_type] = AutoReplyAgent(self,{
+    "reply_delay": 2,
+    "check_interval": 5,
+    "gemini_api_key": "AIzaSyBwI5kizmWzMf0ryUAKuA3yorbREJb1qCs",
+    "system_instruction": "You are a helpful customer service bot. Keep responses friendly and concise.",
+    "model": "gemini-1.5-flash",
+})
             elif agent_type == AgentType.AUTO_OUTREACH:
                 self.agents[agent_type] = AutoOutreachAgent(self)
             else:
@@ -42,7 +56,7 @@ class AutomationSession:
         
         return self.agents[agent_type]
     
-    def create_driver(self, headless: bool = False):
+    def create_driver(self, headless: bool = True):
         """Initialize Chrome driver"""
         try:
             self.driver = DriverManager.create_driver(self.session_id, self.profile_name, headless)
@@ -66,11 +80,38 @@ class AutomationSession:
         if len(self.messages) > self.max_messages:
             self.messages = self.messages[-self.max_messages:]
 
-        # Print the new message in red
-        RED = "\033[91m"
+        # ANSI colors for types and parts
+        COLORS = {
+            "status": "\033[94m",   # Blue
+            "log": "\033[92m",      # Green
+            "action": "\033[93m",   # Yellow
+            "default": "\033[91m",  # Red
+            "timestamp": "\033[90m",# Gray
+            "key": "\033[95m",      # Magenta
+            "value": "\033[97m",    # White
+        }
         RESET = "\033[0m"
-        print(f"{RED}[NEW MESSAGE] {message}{RESET}")
-    
+
+        # Format timestamp nicely
+        time_str = datetime.fromisoformat(message.timestamp).strftime("%H:%M:%S")
+
+        # Choose color for message type
+        color = COLORS.get(msg_type.lower(), COLORS["default"])
+
+        # Pretty format message content (key-value lines)
+        pretty_content = "\n".join(
+            f"  {COLORS['key']}{k}{RESET}: {COLORS['value']}{v}{RESET}"
+            for k, v in content.items()
+        )
+
+        # Print formatted block
+        print(
+            f"\n{COLORS['timestamp']}[{time_str}]{RESET} "
+            f"{color}{msg_type.upper()}{RESET}\n"
+            f"{pretty_content}\n"
+            f"{COLORS['timestamp']}{'-' * 40}{RESET}"
+        )
+
     def get_messages(self, since: Optional[str] = None, limit: int = 50) -> List[SessionMessage]:
         """Get messages"""
         if since:

@@ -41,7 +41,7 @@ async def create_session(request: CreateSessionRequest):
 
 
 @router.post("/sessions/resume", response_model=SessionResponse)
-async def resume_session(session_id: str, headless: bool = False):
+async def resume_session(session_id: str, headless: bool = True):
     """Resume a saved session from disk and auto-initialize driver"""
     try:
         base_uuid, profile_name = SessionManager.decode_session_id(session_id)
@@ -86,7 +86,7 @@ async def init_driver(session_id: str):
     if session.driver:
         return {"success": False, "message": "Driver already active"}
     
-    headless = session.config.get('headless', False)
+    headless = session.config.get('headless', True)
     if session.create_driver(headless=headless):
         session.status = SessionStatus.ACTIVE
 
@@ -147,6 +147,26 @@ async def list_active_sessions():
             "agents": s["agents"]
         })
     return {"success": True, "sessions": formatted, "count": len(formatted)}
+
+
+@router.get("/sessions/verify/{session_id}")
+async def verify_session(session_id: str):
+    """Verify if a session exists"""
+    session = session_manager.get_session(session_id)
+    if session:
+        return {
+            "success": True,
+            "message": "Session exists",
+            "session_id": session_id,
+            "profile_name": session.get("profile_name"),
+            "status": session.get("status"),
+        }
+    return {
+        "success": False,
+        "message": "Session not found",
+        "session_id": session_id
+    }
+
 
 @router.get("/sessions/profiles")
 async def list_profiles():
@@ -287,4 +307,72 @@ async def send_message_route(session_id: str, contact: str, message: str):
         raise HTTPException(status_code=400, detail="Session/driver not ready")
     
     result = await AutomationActions.send_message(session, contact, message)
+    return result
+
+
+
+
+
+
+
+
+
+
+# New routes
+@router.get("/sessions/{session_id}/whatsapp/chats")
+async def get_chats_list(session_id: str):
+    """Get list of all WhatsApp chats with IDs"""
+    session = session_manager.get_session(session_id)
+    if not session or not session.driver:
+        raise HTTPException(status_code=400, detail="Session/driver not ready")
+    
+    result = await AutomationActions.get_chats_list(session)
+    return result
+
+@router.post("/sessions/{session_id}/whatsapp/open-unread")
+async def open_unread_chats(session_id: str):
+    """Find and open all unread chats"""
+    session = session_manager.get_session(session_id)
+    if not session or not session.driver:
+        raise HTTPException(status_code=400, detail="Session/driver not ready")
+    
+    result = await AutomationActions.open_unread_chats(
+        session, 
+        click_delay=1.0,
+        verify_ids=True
+    )
+    return result
+
+@router.get("/sessions/{session_id}/whatsapp/chat-history")
+async def extract_chat_history(session_id: str):
+    """Extract chat history from currently open chat"""
+    session = session_manager.get_session(session_id)
+    if not session or not session.driver:
+        raise HTTPException(status_code=400, detail="Session/driver not ready")
+    
+    result = await AutomationActions.extract_chat_history(session)
+    return result
+
+
+
+
+
+@router.get("/sessions/{session_id}/whatsapp/chat-history/formatted")
+async def extract_and_format_chat_history(session_id: str):
+    """Extract and format chat history for AI processing"""
+    session = session_manager.get_session(session_id)
+    if not session or not session.driver:
+        raise HTTPException(status_code=400, detail="Session/driver not ready")
+    
+    result = await AutomationActions.extract_and_format_chat_history(session)
+    return result
+
+@router.get("/sessions/{session_id}/whatsapp/verify-chat-ids")
+async def verify_chat_ids(session_id: str):
+    """Verify chat ID consistency"""
+    session = session_manager.get_session(session_id)
+    if not session or not session.driver:
+        raise HTTPException(status_code=400, detail="Session/driver not ready")
+    
+    result = await AutomationActions.verify_chat_ids(session)
     return result

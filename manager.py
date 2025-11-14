@@ -3,6 +3,7 @@ import os
 from typing import Dict, Optional, List , Tuple
 from session import AutomationSession
 from models import SessionStatus, AgentType
+import shutil
 
 import base64
 import re
@@ -94,14 +95,7 @@ class SessionManager:
         """Get session by ID"""
         return self.sessions.get(session_id)
     
-    def delete_session(self, session_id: str) -> bool:
-        """Delete session"""
-        session = self.sessions.get(session_id)
-        if session:
-            session.cleanup()
-            del self.sessions[session_id]
-            return True
-        return False
+
     
     def pause_session(self, session_id: str) -> bool:
         """Pause session (closes browser, keeps state)"""
@@ -163,5 +157,19 @@ class SessionManager:
                 })
         
         return profiles
+    def delete_session(self, session_id: str) -> bool:
+        """Delete session folder on disk"""
+        base_path = "/home/suraj/chrome_selenium"
+        session_folder = os.path.join(base_path, f"session_{session_id}")
+
+        if os.path.exists(session_folder) and os.path.isdir(session_folder):
+            try:
+                shutil.rmtree(session_folder)
+                return True
+            except Exception as e:
+                print(f"Failed to delete session folder: {e}")
+                return False
+
+        return False
 
 session_manager = SessionManager()

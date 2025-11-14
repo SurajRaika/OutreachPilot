@@ -347,7 +347,7 @@
  * Real API implementation for POST /api/sessions/resume
  * (Compatible with FastAPI query parameters)
  */
-async function resumeSession(sessionId, headless = false) {
+async function resumeSession(sessionId, headless = True) {
     const endpoint = `/api/sessions/resume?session_id=${encodeURIComponent(sessionId)}&headless=${headless}`;
 
     try {
@@ -537,13 +537,11 @@ async function sessionPolling(session) {
         } else {
             console.warn(`[sessionPolling] ❌ Polling failed for ${session.id}: ${response.message}`);
             addLiveStatus(session.id, `<span class="text-red-500">POLL ERROR: ${response.message.substring(0, 30)}...</span>`);
-            updateLiveSessionStatus(session.id, 'ERROR', 'fas fa-exclamation-triangle');
         }
 
     } catch (error) {
         console.error(`[sessionPolling] 🚨 NETWORK ERROR during poll for ${session.id}`, error);
         addLiveStatus(session.id, `<span class="text-red-500">NETWORK FAILED: Check API.</span>`);
-        updateLiveSessionStatus(session.id, 'UNREACHABLE', 'fas fa-times-circle');
     }
 }
 
@@ -585,8 +583,8 @@ function handleStatusMessage(session, msg) {
 
     session.status = state?.toUpperCase() || "UNKNOWN";
     session.icon = getStatusIcon(session.status);
+updateLiveSessionStatus(session.id, message, "fas fa-times-circle");
 
-    session.statusLog.unshift(formatLogEntry(`STATUS → ${message || state || 'updated'} (${progress || 0}%)`));
 }
 
 function handleLogMessage(session, msg) {
@@ -600,7 +598,6 @@ async function handleActionMessage(session, msg) {
     console.log(`[handleActionMessage] Handling ACTION message for ${session.id}`, msg);
     const { action_type, message, data } = msg.content;
 
-    session.statusLog.unshift(formatLogEntry(`ACTION → ${message || action_type}`));
 
     if (action_type === "SHOW_QR") {
         console.log(`[handleActionMessage] 🧭 Detected SHOW_QR action, fetching QR from API...`);
@@ -635,10 +632,17 @@ async function handleActionMessage(session, msg) {
             console.error(`[handleActionMessage] ❌ Error fetching WhatsApp QR:`, error);
             session.statusLog.unshift(formatLogEntry("❌ Error fetching WhatsApp QR"));
         }
-    } else {
+    } 
+    else if(action_type === "HIDE_QR"){
+        hideQrCode(session.id)
+    }
+    else {
         console.log(`[handleActionMessage] ℹ️ Non-QR action detected: ${action_type}`);
     }
 }
+
+
+
 
 // 🔧 HELPERS
 function getStatusIcon(status) {
@@ -715,52 +719,69 @@ function formatLogEntry(message) {
             /**
              * Handles the submission from the modal, calling the mock creation API.
              */
-            async function submitNewSession() {
-                const inputElement = document.getElementById('session-name-input');
-                const button = document.getElementById('create-session-button');
-                const sessionName = inputElement.value.trim();
+async function submitNewSession() {
+    const inputElement = document.getElementById('session-name-input');
+    const button = document.getElementById('create-session-button');
+    const sessionName = inputElement.value.trim();
 
-                if (!sessionName) {
-                    inputElement.placeholder = "Name is required!";
-                    inputElement.classList.add('border-red-500');
-                    setTimeout(() => {
-                        inputElement.classList.remove('border-red-500');
-                        inputElement.placeholder = "Enter session name (e.g., Test Agent)";
-                    }, 1500);
-                    return;
-                }
+    if (!sessionName) {
+        inputElement.placeholder = "Name is required!";
+        inputElement.classList.add('border-red-500');
+        setTimeout(() => {
+            inputElement.classList.remove('border-red-500');
+            inputElement.placeholder = "Enter session name (e.g., Test Agent)";
+        }, 1500);
+        return;
+    }
 
-                // Show loading state
-                button.disabled = true;
-                button.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Creating...';
+    // Show loading state
+    button.disabled = true;
+    button.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Creating...';
 
-                try {
-                    const apiResponse = await mockCreateSession(sessionName);
+    try {
+        // --- REAL API CALL ---
+        const response = await fetch('/api/sessions/create', {
+            method: 'POST',
+            headers: {
+                'Accept': 'application/json',
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                profile_name: sessionName,
+                session_type: 'whatsapp',   // or dynamically set if needed
+                config: {},                 // add any additional config here
+                headless: false
+            })
+        });
 
-                    if (apiResponse.success) {
-                        console.log(`SUCCESS: Session created. ID: ${apiResponse.data.session_id}`);
-                        // 2. STATE TRANSITION: Add the new session to the live list
-                        createNewLiveSession(apiResponse.data.session_id, apiResponse.data.profile_name);
-                        hideModal(); // Hide modal on success
-                    } else {
-                        console.error(`FAILURE: API Create failed. Message: ${apiResponse.message}`);
-                        inputElement.classList.add('border-red-500');
-                        setTimeout(() => inputElement.classList.remove('border-red-500'), 2000);
-                        button.innerHTML = 'Error';
-                        setTimeout(() => {
-                            button.innerHTML = 'Create Session';
-                            button.disabled = false;
-                        }, 1000);
-                    }
-                } catch (error) {
-                    console.error("Network or script error during session creation:", error);
-                    button.innerHTML = 'Network Error';
-                    setTimeout(() => {
-                        button.innerHTML = 'Create Session';
-                        button.disabled = false;
-                    }, 2000);
-                }
-            }
+        const apiResponse = await response.json();
+
+        if (response.ok && apiResponse.success) {
+            console.log(`SUCCESS: Session created. ID: ${apiResponse.data.session_id}`);
+            // Add the new session to the live list
+            createNewLiveSession(apiResponse.data.session_id, apiResponse.data.profile_name);
+            hideModal(); // Hide modal on success
+        } else {
+            console.error(`FAILURE: API Create failed. Message: ${apiResponse.message}`);
+            inputElement.classList.add('border-red-500');
+            setTimeout(() => inputElement.classList.remove('border-red-500'), 2000);
+            button.innerHTML = 'Error';
+            setTimeout(() => {
+                button.innerHTML = 'Create Session';
+                button.disabled = false;
+            }, 1000);
+        }
+    } catch (error) {
+        console.error("Network or script error during session creation:", error);
+        button.innerHTML = 'Network Error';
+        setTimeout(() => {
+            button.innerHTML = 'Create Session';
+            button.disabled = false;
+        }, 2000);
+    }
+}
+
+
 
 
             // --- State Management Functions ---
@@ -971,23 +992,44 @@ function formatLogEntry(message) {
             /**
              * Deletes a profile/session from its current list.
              */
-            function deleteProfile(id) {
-                console.log(`Action: Deleting profile ID: ${id}`);
-                const liveIndex = liveSessions.findIndex(s => s.id === id);
-                const storedIndex = storedProfiles.findIndex(s => s.id === id);
+async function deleteProfile(id) {
+    console.log(`Action: Deleting profile ID: ${id}`);
 
-                if (liveIndex > -1) {
-                    // Should theoretically call a DELETE API here first
-                    liveSessions.splice(liveIndex, 1);
-                    delete expandedDetailsState[id];
-                    delete qrCodeVisibleState[id];
-                    renderDashboard();
-                } else if (storedIndex > -1) {
-                    // Should theoretically call a DELETE API here first
+    try {
+        const response = await fetch(`/api/sessions/${id}`, {
+            method: 'DELETE',
+            headers: {
+                'Accept': 'application/json'
+            }
+        });
+
+        const result = await response.json();
+
+        if (response.ok && result.success) {
+            console.log('Session deleted successfully:', result.message);
+
+            // Remove from liveSessions or storedProfiles
+            const liveIndex = liveSessions.findIndex(s => s.id === id);
+            if (liveIndex > -1) {
+                liveSessions.splice(liveIndex, 1);
+                delete expandedDetailsState[id];
+                delete qrCodeVisibleState[id];
+            } else {
+                const storedIndex = storedProfiles.findIndex(s => s.id === id);
+                if (storedIndex > -1) {
                     storedProfiles.splice(storedIndex, 1);
-                    renderDashboard();
                 }
             }
+
+            renderDashboard();
+        } else {
+            console.error('Failed to delete session:', result.message);
+        }
+    } catch (err) {
+        console.error('Error deleting session:', err);
+    }
+}
+
 
             /**
              * Toggles the visibility of the session details container and icon.
@@ -1077,6 +1119,8 @@ function formatLogEntry(message) {
 
 
                 let actionButtonsHTML = '';
+                                let statusRowHTML = ''; // NEW ROW 1.5
+
                 let detailsHTML = '';
 
                 const statusIcon = isLive && session.icon ? `<i class="${session.icon} mr-1"></i>` : '';
@@ -1100,7 +1144,27 @@ function formatLogEntry(message) {
 
                     const hiddenClass = isQrCodeVisible || isDetailsExpanded ? '' : 'hidden';
                     const chevronIconClass = isDetailsExpanded ? 'fa-chevron-up' : 'fa-chevron-down'; 
+ // NEW: Permanent Status Row Content (Row 1.5)
+const statusLogHTML = (session.statusLog || [])
+  .slice(0, 1)
+  .map(log => `<li class="truncate"><div class="flex items-start">${log}</div></li>`)
+  .join('');
 
+                    // This row is always displayed for live, non-QR view
+                    if (!isQrCodeVisible) {
+                    statusRowHTML = `
+                        <div class="flex justify-between items-center flex-shrink-0 pt-1 pb-2 border-b border-gray-300 mb-3">
+                            <span class="text-xs font-semibold uppercase text-black tracking-wider">
+                                ${statusIcon} ${session.status}
+                            </span>
+                              <!-- List style changed to list-none for cleaner log stacking -->
+                                    <ul id="status-log-${session.id}" class="text-xs text-gray-600 mt-2 space-y-1 list-none">
+                                        ${statusLogHTML}
+                                    </ul>
+                        </div>
+                    `;
+                    }
+                    
                     if (isQrCodeVisible) {
                         // 1. QR CODE VIEW
                         actionButtonsHTML = `
@@ -1171,7 +1235,13 @@ function formatLogEntry(message) {
                                 title="Toggle Details" ${isBusy ? 'disabled' : ''}>
                                 <!-- CHEVRON ICON CLASS is dynamically set based on state -->
                                 <i class="fa-solid ${chevronIconClass}" id="chevron-icon-${session.id}"></i>
-                            </button>
+                            </button>   <!-- More Options Button -->
+ <!-- More Options Button -->
+    <button onclick="window.location.href='session.html?id=${session.id}'"
+        class="action-btn bg-white text-gray-700 border border-gray-400 hover:bg-gray-100"
+        title="Manage Session">
+        <i class="fas fa-ellipsis-h text-sm"></i>
+    </button>
                         `;
 
                         const sessionType = session.name.toLowerCase().includes('bot') ? 'BOT AUTOMATION' : 'OUTREACH FLOW';
@@ -1272,7 +1342,8 @@ function formatLogEntry(message) {
                                 ${actionButtonsHTML}
                             </div>
                         </div>
-
+                        <!-- NEW ROW 1.5: Permanent Live Status Display -->
+                        ${statusRowHTML}
                         <!-- ROW 2: Profile Name / Status Details -->
                         ${detailsHTML}
                     </div>

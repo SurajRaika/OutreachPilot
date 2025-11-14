@@ -57,4 +57,4 @@ async def health():
 async def shutdown():
     from manager import session_manager
     for sid in list(session_manager.sessions.keys()):
-        session_manager.delete_session(sid)
+        session_manager.stop_session(sid)

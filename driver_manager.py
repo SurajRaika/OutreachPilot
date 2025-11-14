@@ -14,8 +14,8 @@ class DriverManager:
         """Create Chrome driver with profile management"""
         chrome_options = webdriver.ChromeOptions()
         
-        if headless:
-            chrome_options.add_argument("--headless=new")
+        # if headless:
+        chrome_options.add_argument("--headless=new")
         
         chrome_options.add_argument("--no-sandbox")
         chrome_options.add_argument("--disable-dev-shm-usage")

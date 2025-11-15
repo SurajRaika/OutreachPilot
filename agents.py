@@ -24,6 +24,9 @@ class BaseAgent:
         self.status = AgentStatus.DISABLED
         self.task: Optional[asyncio.Task] = None
         self.error: Optional[str] = None
+        self.list_of_contact=[]
+        self.messageTemplate=""
+        self.ai_instruction=""
     
     async def start(self):
         """Start the agent"""
@@ -53,6 +56,58 @@ class BaseAgent:
         """Override in subclass"""
         pass
 
+
+def get_chat_reply(
+    chathistory_text: str,
+    system_instruction: str,
+    gemini_api_key: str
+) -> str:
+    """
+    Generate a reply using Google's Gemini API based on chat history and system instructions.
+    
+    Args:
+        chathistory_text (str): The conversation history to provide context
+        system_instruction (str): System instructions/prompt to guide the model's behavior
+        gemini_api_key (str): Your Google Gemini API key
+    
+    Returns:
+        str: The generated reply text
+    
+    Raises:
+        ValueError: If any required parameter is empty
+        Exception: If API call fails
+    """
+    
+    # Validate inputs
+    if not chathistory_text or not isinstance(chathistory_text, str):
+        raise ValueError("chathistory_text must be a non-empty string")
+    if not system_instruction or not isinstance(system_instruction, str):
+        raise ValueError("system_instruction must be a non-empty string")
+    if not gemini_api_key or not isinstance(gemini_api_key, str):
+        raise ValueError("gemini_api_key must be a non-empty string")
+    
+    # Configure the API
+    genai.configure(api_key=gemini_api_key)
+    
+    # Create the model
+    model = genai.GenerativeModel(
+        model_name="gemini-2.0-flash",
+        system_instruction=system_instruction
+    )
+    
+    # Generate reply
+    response = model.generate_content(chathistory_text)
+    
+    return response.text
+
+
+
+
+
+
+
+
+
 class AutoReplyAgent(BaseAgent):
     """
     Handles automatic replies to incoming messages using Gemini API
@@ -76,47 +131,76 @@ class AutoReplyAgent(BaseAgent):
     
     def _initialize_gemini(self):
         """Initialize Gemini API with configuration"""
-        api_key = self.config.get("gemini_api_key")
-        model_name = self.config.get("model", "gemini-1.5-flash")
-        
-        if not api_key:
-            raise ValueError("gemini_api_key is required in config")
-        
-        genai.configure(api_key=api_key)
-        self.model = genai.GenerativeModel(model_name)
-    
-    async def _generate_reply(self, incoming_message: str) -> str:
-        """
-        Generate a reply using Gemini API based on incoming message and system instruction
-        """
         try:
-            system_instruction = self.config.get(
-                "system_instruction", 
-                "You are a helpful WhatsApp assistant. Keep responses concise and friendly."
-            )
+            api_key = self.config.get("gemini_api_key")
+            model_name = self.config.get("model", "gemini-1.5-flash")
             
-            # Create the prompt with system instruction context
-            prompt = f"""System Instruction: {system_instruction}
-
-                Incoming Message: {incoming_message}
-
-                Generate an appropriate reply based on the system instruction. Keep the response concise for WhatsApp (under 1000 characters)."""
+            self.session.add_message("log", {
+                "agent": "autoreply",
+                "action": "initialize_gemini",
+                "message": f"Initializing Gemini with model: {model_name}"
+            })
             
-            # Call Gemini API
-            response = self.model.generate_content(prompt)
-            reply_text = response.text.strip()
+            if not api_key:
+                self.session.add_message("error", {
+                    "agent": "autoreply",
+                    "action": "initialize_gemini",
+                    "error": "gemini_api_key is required in config"
+                })
+                raise ValueError("gemini_api_key is required in config")
             
-            return reply_text
-        
+            genai.configure(api_key=api_key)
+            self.model = genai.GenerativeModel(model_name)
+            
+            self.session.add_message("status", {
+                "agent": "autoreply",
+                "action": "initialize_gemini",
+                "message": "Gemini API initialized successfully"
+            })
+            
         except Exception as e:
             self.session.add_message("error", {
                 "agent": "autoreply",
-                "action": "generate_reply",
+                "action": "initialize_gemini",
                 "error": str(e)
             })
-            # Fallback reply if Gemini fails
+            raise
+    async def _generate_reply(self, chat_history: str) -> str:
+
+        self.session.add_message("log", {"message": "Starting _generate_reply method"})
+
+        API_KEY = self.config.get("gemini_api_key")
+        self.session.add_message("log", {"message": f"API Key loaded: {bool(API_KEY)}"})
+
+        if not API_KEY:
+            self.session.add_message("error", {
+                "agent": "autoreply",
+                "action": "initialize_gemini",
+                "error": "gemini_api_key is required in config"
+            })
+            raise ValueError("gemini_api_key is required in config")
+
+        # System instruction
+        system_inst = self.config.get("system_instruction")
+        self.session.add_message("log", {"message": f"System instruction retrieved: {bool(system_inst)}"})
+
+        try:
+            self.session.add_message("log", {"message": "Calling get_chat_reply()..."})
+            reply = get_chat_reply(chat_history, system_inst, API_KEY)
+            self.session.add_message("log", {"message": "Reply successfully generated"})
+            print("Generated Reply:", reply)
+            return reply
+
+        except Exception as e:
+            self.session.add_message("error", {
+                "message": "Exception occurred while generating reply",
+                "exception": str(e)
+            })
+            self.session.add_message("log", {"message": "Fallback message returned"})
             return "Thanks for your message! I'll get back to you soon."
-    
+
+
+
     async def _run(self):
         self.session.add_message("status", {"message": "AutoReplyAgent Intisted but not running"})
         """Main loop: checks unread chats and replies using Gemini API."""
@@ -145,7 +229,7 @@ class AutoReplyAgent(BaseAgent):
 
                 try:
                     # 🔍 Step 1: Find unread chats
-                    result = await AutomationActions.open_unread_chats(self.session)
+                    result = await AutomationActions.open_unread_chat(self.session)
 
                     # Check pause state before processing results
                     if self.status != AgentStatus.ENABLED:
@@ -155,14 +239,14 @@ class AutoReplyAgent(BaseAgent):
                         # ❌ Driver or list error
                         self.session.add_message("error", {
                             "agent": "autoreply",
-                            "action": "open_unread_chats",
+                            "action": "open_unread_chat",
                             "error": result.get("error")
                         })
                         await asyncio.sleep(check_interval)
                         continue
 
                     # ✅ Case 1: No unread chats
-                    if result.get("message") == "No unread chats found" or result.get("total_unread", 0) == 0:
+                    if not result.get("opened_chat"):
                         self.session.add_message("log", {
                             "agent": "autoreply",
                             "event": "no_unread_chats"
@@ -172,23 +256,27 @@ class AutoReplyAgent(BaseAgent):
                         continue
 
                     # ✅ Case 2: There are unread chats
-                    opened_chats = result.get("opened_chats", [])
+                    opened_chat = result.get("opened_chat")
                     self.session.add_message("log", {
                         "agent": "autoreply",
                         "event": "found_unread_chats",
-                        "count": len(opened_chats)
+                        "opened_chat_id": opened_chat.get("id")
                     })
                     self.session.add_message("status", {"message": "unread chat Found and Opening "})
+                    self.session.add_message("action", {"action_type": "highlight_chat","chat_id":opened_chat.get("id")})
 
 
-                    for chat_info in opened_chats:
+                    chat_info = opened_chat
+                    if chat_info:
+
+
                         if self.status != AgentStatus.ENABLED:
                             break
 
                         try:
-                            contact = chat_info.get("contact") or chat_info.get("name") or "Unknown"
-                            number = chat_info.get("number")
-                            incoming_message = chat_info.get("message", "")
+                            # Process only one chat
+                            number = chat_info.get("id")
+
                             
 
 
@@ -201,6 +289,17 @@ class AutoReplyAgent(BaseAgent):
                                 break
                             self.session.add_message("status", {"message": "Generating Reply ......."})
 
+                            # 📝 Step 2: Extract incoming message
+                            history = await AutomationActions.extract_and_format_chat_history(self.session)
+
+                            if not history.get("success"):
+                                incoming_message = ""
+                            else:
+                                incoming_message = history.get("formatted_text", "")
+                                
+
+                            # Wait before replying
+
                             # 🤖 Step 2: Generate reply using Gemini API
                             reply_message = await self._generate_reply(incoming_message)
 
@@ -211,15 +310,15 @@ class AutoReplyAgent(BaseAgent):
                                 self.session,  reply_message
                             )
 
-                            self.session.add_message("log", {
-                                "agent": "autoreply",
-                                "action": "reply_sent",
-                                "contact": contact,
-                                "number": number,
-                                "incoming_message": incoming_message,
-                                "generated_reply": reply_message,
-                                "result": send_result
-                            })
+                            # self.session.add_message("log", {
+                            #     "agent": "autoreply",
+                            #     "action": "reply_sent",
+                            #     "contact": contact,
+                            #     "number": number,
+                            #     "incoming_message": incoming_message,
+                            #     "generated_reply": reply_message,
+                            #     "result": send_result
+                            # })
 
                         except Exception as e:
                             self.session.add_message("error", {
@@ -255,6 +354,25 @@ class AutoReplyAgent(BaseAgent):
             })
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 class AutoOutreachAgent(BaseAgent):
     """
     Handles automatic outreach campaigns
@@ -286,19 +404,19 @@ class AutoOutreachAgent(BaseAgent):
             daily_limit = self.config.get("daily_limit", 50)
             
             if not contacts_list:
-                self.session.add_message("log", {
-                    "agent": "auto_outreach",
-                    "event": "no_contacts",
-                    "message": "No contacts in list"
-                })
+                # self.session.add_message("log", {
+                #     "agent": "auto_outreach",
+                #     "event": "no_contacts",
+                #     "message": "No contacts in list"
+                # })
                 return
             
-            self.session.add_message("log", {
-                "agent": "auto_outreach",
-                "event": "started",
-                "total_contacts": len(contacts_list),
-                "daily_limit": daily_limit
-            })
+            # self.session.add_message("log", {
+            #     "agent": "auto_outreach",
+            #     "event": "started",
+            #     "total_contacts": len(contacts_list),
+            #     "daily_limit": daily_limit
+            # })
             
             for contact in contacts_list:
                 if self.status != AgentStatus.ENABLED:
@@ -306,11 +424,11 @@ class AutoOutreachAgent(BaseAgent):
                 
                 try:
                     if self.messages_sent_today >= daily_limit:
-                        self.session.add_message("log", {
-                            "agent": "auto_outreach",
-                            "event": "daily_limit_reached",
-                            "count": self.messages_sent_today
-                        })
+                        # self.session.add_message("log", {
+                        #     "agent": "auto_outreach",
+                        #     "event": "daily_limit_reached",
+                        #     "count": self.messages_sent_today
+                        # })
                         break
                     
                     result = await AutomationActions.send_message(
@@ -319,12 +437,12 @@ class AutoOutreachAgent(BaseAgent):
                         outreach_message
                     )
                     
-                    self.session.add_message("log", {
-                        "agent": "auto_outreach",
-                        "action": "message_sent",
-                        "contact": contact,
-                        "success": result.get("success")
-                    })
+                    # self.session.add_message("log", {
+                    #     "agent": "auto_outreach",
+                    #     "action": "message_sent",
+                    #     "contact": contact,
+                    #     "success": result.get("success")
+                    # })
                     
                     if result.get("success"):
                         self.messages_sent_today += 1
@@ -384,3 +502,48 @@ class AutoOutreachAgent(BaseAgent):
             "total_contacts": len(self.config.get("contacts_list", [])),
             "status": self.status.value
         }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+        
+
+
+if __name__ == "__main__":
+    # Replace with your actual API key
+    API_KEY = ""
+    
+    # Example chat history
+    chat_history = """User: Hello, how are you?
+Assistant: I'm doing well, thank you for asking!
+User: What can you help me with?"""
+    
+    # System instruction
+    system_inst = "You are a helpful AI assistant. Respond concisely and politely."
+    
+    try:
+        reply = get_chat_reply(chat_history, system_inst, API_KEY)
+        print("Generated Reply:")
+        print(reply)
+    except Exception as e:
+        print(f"Error: {e}")
+
+
+
+

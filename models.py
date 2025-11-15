@@ -23,6 +23,11 @@ class SessionMessage(BaseModel):
     timestamp: str
     type: str
     content: dict
+    
+class EnableAgentRequest(BaseModel):
+    list_of_contact: Optional[List[str]] = []
+    messageTemplate: Optional[str] = ""
+    ai_instruction: Optional[str] = ""
 
 class CreateSessionRequest(BaseModel):
     profile_name: Optional[str] = None  # Optional for resuming from disk

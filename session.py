@@ -45,7 +45,7 @@ class AutomationSession:
                 self.agents[agent_type] = AutoReplyAgent(self,{
     "reply_delay": 2,
     "check_interval": 5,
-    "gemini_api_key": "AIzaSyBwI5kizmWzMf0ryUAKuA3yorbREJb1qCs",
+    "gemini_api_key": "",
     "system_instruction": "You are a helpful customer service bot. Keep responses friendly and concise.",
     "model": "gemini-1.5-flash",
 })
@@ -119,21 +119,32 @@ class AutomationSession:
             return filtered[-limit:]
         return self.messages[-limit:]
     
-    async def enable_agent(self, agent_type: AgentType, config: dict = None):
-        """Enable an agent"""
+    # Updated enable_agent method in the session manager (if needed)
+    async def enable_agent(self, agent_type: AgentType, list_of_contact: List[str] = [], messageTemplate: str = "", ai_instruction: str = ""):
+        """Enable an agent with optional configuration"""
         try:
+            # Create or retrieve the agent
             agent = self._get_or_create_agent(agent_type)
-            
-            if config:
-                agent.config = config
-            
+
+            # Update agent's attributes if values are provided
+            if list_of_contact:
+                agent.list_of_contact = list_of_contact
+            if messageTemplate:
+                agent.messageTemplate = messageTemplate
+            if ai_instruction:
+                agent.ai_instruction = ai_instruction
+
+            # Start the agent
             await agent.start()
+            
+            # Log the success
             self.add_message("log", {"message": f"Agent {agent_type.value} enabled"})
             return True
         except Exception as e:
+            # Log the error if any exception occurs
             self.add_message("error", {"message": f"Failed to enable agent {agent_type.value}: {str(e)}"})
             return False
-    
+
     async def disable_agent(self, agent_type: AgentType):
         """Disable an agent"""
         if agent_type not in self.agents:

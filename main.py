@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import os
 from routes import router
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import RedirectResponse
 
 app = FastAPI(
     title="WhatsApp Automation API",
@@ -40,14 +41,9 @@ else:
     print("⚠️ UI folder not found. Skipping UI mount.")
 
 
-
 @app.get("/")
 async def root():
-    return {
-        "message": "WhatsApp Automation API",
-        "version": "2.0.0",
-        "docs": "/docs"
-    }
+    return RedirectResponse(url="/ui/index.html")
 
 @app.get("/health")
 async def health():

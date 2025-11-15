@@ -4,29 +4,29 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WhatsApp Agent Panel</title>
-    
-<script src="https://cdn.tailwindcss.com"></script>
-    
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css"
-        xintegrity="sha512-SnH5WK+bZxgPHs44uWIX+LLMDJ8g2YJTIy2E/lKScVq4F3f9G5bQx2T/Bw2tI8g1e/Q71W+I8g1e/Q71W+I4G9Fh7G9C0Q="
-        crossorigin="anonymous" referrerpolicy="no-referrer" />
+    <title>WhatsApp Agent Panel Compacted</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css"
+        crossorigin="anonymous" referrerpolicy="no-referrer">
     <style>
         /* Setup for Inter font and light theme body styles */
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap');
 
         body {
             font-family: 'Inter', sans-serif;
-            background-color: #f4f4f5;
-            /* bg-zinc-100 */
+            background-color: #f9f9f9;
+            /* bg-zinc-50 - Very Light Gray */
             min-height: 100vh;
+            padding: 0.5rem;
         }
 
-        /* Base Card Styling (Reduced rounding: rounded-sm) */
+        /* Base Card Styling (Sharp corners internally) */
         .card-base {
             transition: all 0.3s ease-in-out;
-            border-radius: 0.125rem;
-            /* rounded-sm */
+            border-radius: 0;
+            /* Sharp corners internally */
+            border: 1px solid #d1d5db;
+            /* border-gray-300 */
         }
 
         .card-base:hover {
@@ -43,911 +43,1308 @@
             display: inline-block;
         }
 
-        /* Action buttons refined for consistency and modern look */
+        /* Action buttons refined for consistency and modern look (Sharp corners) */
         .action-btn {
-            width: 38px;
-            height: 38px;
+            width: 30px;
+            height: 30px;
             display: flex;
             align-items: center;
             justify-content: center;
-            /* CHANGED: From rounded-full to rounded-sm */
-            border-radius: 0.125rem; 
+            border-radius: 0;
+            /* Sharp corners */
             transition: all 0.2s ease;
-            /* Added a heavier shadow for contrast */
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1); 
+            box-shadow: 0 2px 4px -1px rgba(0, 0, 0, 0.05), 0 1px 2px -1px rgba(0, 0, 0, 0.05);
         }
 
         .action-btn:hover {
-            box-shadow: 0 8px 10px -3px rgba(0, 0, 0, 0.15), 0 4px 6px -4px rgba(0, 0, 0, 0.15);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.08), 0 2px 4px -2px rgba(0, 0, 0, 0.08);
         }
 
-        /* Monochrome Pulse for Status (used in Detail View only) */
-        .mono-pulse-btn {
-            animation: mono-pulse-ring 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        /* CHAT BUBBLE STYLES */
+        .chat-bubble {
+            max-width: 75%;
+            padding: 8px 12px;
+            border-radius: 6px;
+            box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
         }
 
-        @keyframes mono-pulse-ring {
-            0%,
-            100% {
-                box-shadow: 0 0 0 0 rgba(0, 0, 0, 0.2);
+        .chat-bubble-self {
+            background-color: #dcf8c6;
+            /* WhatsApp Green */
+            align-self: flex-end;
+            margin-left: auto;
+        }
+
+        .chat-bubble-other {
+            background-color: #ffffff;
+            /* White */
+            border: 1px solid #e5e7eb;
+            /* border-gray-200 */
+            align-self: flex-start;
+        }
+
+        /* Chat list item non-interactive styling (Allowing programmatic highlight) */
+        .numbers_item {
+            cursor: default !important;
+            transition: background-color 0.15s, border-left 0.15s;
+        }
+
+        .numbers_item:hover {
+            background-color: initial !important;
+        }
+
+        /* --- CSS-ONLY INTERACTION LOGIC (Only for Log Sidebar) --- */
+        #log-toggle-check {
+            display: none;
+        }
+
+        #log-toggle-check:checked~#floating-log-sidebar {
+            --tw-translate-x: 0px;
+            transform: translate(var(--tw-translate-x), var(--tw-translate-y)) rotate(var(--tw-rotate)) skewX(var(--tw-skew-x)) skewY(var(--tw-skew-y)) scaleX(var(--tw-scale-x)) scaleY(var(--tw-scale-y));
+        }
+
+        @media (min-width: 640px) {
+            .sm\:w-96 {
+                width: 24rem;
             }
-
-            50% {
-                box-shadow: 0 0 0 12px rgba(0, 0, 0, 0);
-            }
-        }
-
-        /* Utility for showing loading state on a specific card */
-        .starting-session {
-            opacity: 0.5;
-            pointer-events: none;
-            cursor: not-allowed;
-        }
-
-        /* Agent Toggle Button Base Styling */
-        .agent-toggle-btn {
-            appearance: none;
-            outline: none;
-            cursor: pointer;
-            border: none;
         }
     </style>
 </head>
 
-<body>
-    
-<div id="app" class="max-w-6xl mx-auto space-y-4 bg-white p-0 rounded-sm shadow-xl">
-        <div class="p-20 text-center text-gray-500"><i class="fas fa-spinner fa-spin text-2xl mr-2"></i> Initializing App...</div>
-    </div>
+<body class="bg-zinc-50">
 
+    <!-- Main Application Container (Minimal rounding applied here) -->
+    <div id="app" class="max-w-6xl mx-auto bg-white rounded-sm shadow-xl flex flex-col h-[90vh] border border-gray-400">
 
-    
-<div id="new-profile-modal"
-        class="fixed inset-0 z-50 bg-gray-900 bg-opacity-75 flex items-center justify-center hidden" role="dialog"
-        aria-modal="true" aria-labelledby="modal-title">
+        <!-- Header: Consistent Horizontal Padding (px-4) -->
+        <header
+            class="flex justify-between items-center px-4 py-3 border-b border-gray-300 bg-gray-100 rounded-t-sm flex-shrink-0">
+            <div class="flex justify-between w-full items-center space-x-3">
+                <h1 class="text-lg font-semibold text-gray-900 tracking-tight flex items-center">
+                    <i class="fab fa-whatsapp text-gray-800 mr-2 text-xl"></i>Dev & Testing Panel
+                </h1>
 
-        
-<div class="bg-white p-6 rounded-sm shadow-2xl max-w-sm w-full mx-4 border-2 border-gray-400">
-            <h3 id="modal-title" class="text-xl font-semibold mb-4 text-gray-800 border-b-2 border-gray-300 pb-2">Create New Profile</h3>
-            <form id="new-profile-form" class="space-y-4">
-                <div>
-                    <label for="profile-name-input" class="block text-sm font-medium text-gray-700 mb-1">Profile
-                        Name</label>
-                    <input type="text" id="profile-name-input" name="profileName" required
-                        placeholder="e.g., Sales Lead Generator"
-                        class="mt-1 block w-full px-3 py-2 border-2 border-gray-400 rounded-sm shadow-sm focus:outline-none focus:ring-gray-900 focus:border-gray-900 transition duration-150">
+                <div class="flex items-center space-x-2">
+                    <button class="action-btn bg-white text-gray-800 border border-gray-400 hover:bg-gray-200"
+                        title="Stop Session & Save Profile">
+                        <i class="fas fa-power-off text-xs"></i>
+                    </button>
+                    <button class="action-btn bg-white text-gray-700 border border-gray-300 hover:bg-gray-50"
+                        title="Pause Session Logic">
+                        <i class="fas fa-pause text-xs"></i>
+                    </button>
+                    <label for="log-toggle-check"
+                        class="action-btn bg-gray-900 border-2 border-gray-900 text-white hover:bg-black cursor-pointer"
+                        title="Toggle Live Log">
+                        <i class="fas fa-terminal text-xs"></i>
+                    </label>
                 </div>
-                <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-2">Launch Mode</label>
-                    <div class="flex items-center space-x-4">
-                        <label class="flex items-center cursor-pointer">
-                            <input type="radio" name="launchMode" value="headless" checked
-                                class="form-radio h-4 w-4 text-gray-900 focus:ring-gray-900 transition duration-150 border-gray-400">
-                            <span class="ml-2 text-sm text-gray-700">Headless (No UI)</span>
-                        </label>
-                        <label class="flex items-center cursor-pointer">
-                            <input type="radio" name="launchMode" value="visible"
-                                class="form-radio h-4 w-4 text-gray-900 focus:ring-gray-900 transition duration-150 border-gray-400">
-                            <span class="ml-2 text-sm text-gray-700">Visible Browser</span>
-                        </label>
+            </div>
+        </header>
+
+        <!-- Main Content Area: Flex 1 -->
+        <div class="flex flex-1 overflow-hidden">
+
+            <!-- LEFT SIDEBAR -->
+            <div id="leftsidebar" class="w-96 bg-zinc-50 flex flex-col flex-shrink-0 space-y-3 py-3">
+
+                <!-- Sidebar Header: Framed with border, padding, and margin -->
+                <div
+                    class="px-4 py-3 mx-4 border border-gray-300 rounded-sm bg-gray-100 flex justify-between items-center flex-shrink-0 shadow-sm">
+                    <span class="text-sm font-semibold text-gray-800 flex items-center">
+                        <i class="fas fa-hashtag mr-2 text-gray-800"></i> Active Numbers <span
+                            id="active-numbers-count">(Loading)</span>
+                    </span>
+                    <span class="text-xs text-gray-500 font-medium">
+                        <!-- Polling Status Target -->
+                        <span class="status-dot bg-red-500 mr-1"></span> <span id="session-status-text">IDLE</span>
+                    </span>
+                </div>
+
+                <!-- Number List (Scrollable) -->
+                <div id="chat-list-container"
+                    class="overflow-y-auto flex-1 flex flex-col space-y-0 bg-white border border-gray-300 mx-4 p-1 mb-2 shadow-inner rounded-sm">
+                    <!-- Dynamic chat list items will be injected here by JavaScript -->
+                    <div class="p-4 text-center text-sm text-gray-500">
+                        <i class="fas fa-spinner fa-spin mr-2"></i>Loading chats...
                     </div>
-                    <p class="text-xs text-gray-400 mt-1">Visible mode is slower and for debugging only.</p>
                 </div>
-                <div class="flex justify-end space-x-3 pt-2 border-t border-gray-200">
-                    <button type="button" id="close-modal-btn"
-                        class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-sm border-2 border-gray-300 hover:bg-gray-200 transition duration-150">
-                        Cancel
-                    </button>
-                    <button type="submit"
-                        class="px-4 py-2 text-sm font-medium text-white bg-gray-900 rounded-sm hover:bg-black transition duration-150 border-2 border-gray-900">
-                        <i class="fas fa-rocket mr-2"></i> Launch
-                    </button>
+
+                <!-- Sidebar Footer (Minimalistic Add Number Input) -->
+                <div class="px-4 py-3 mx-4 border border-gray-300 rounded-sm flex-shrink-0 bg-gray-100 shadow-sm">
+
+                    <div class="flex items-end space-x-2">
+
+                        <!-- Recipient Number Input (Takes max space) -->
+                        <div class="flex-1">
+                            <label for="recipient-number" class="block text-xs font-medium text-gray-600 mb-1">Add New
+                                Chat Number</label>
+                            <input type="text" id="recipient-number" placeholder="+1 (555) 555-5555"
+                                class="w-full px-2 py-1 border border-gray-300 rounded-sm focus:ring-gray-900 focus:border-gray-900 text-sm shadow-inner">
+                        </div>
+
+                        <!-- Add Button (Square, Black accent) -->
+                        <button id="add-number-btn"
+                            class="w-8 h-8 bg-gray-900 text-white rounded-sm hover:bg-black transition duration-150 flex-shrink-0 border border-gray-900 shadow-sm flex items-center justify-center"
+                            title="Add Number to Active List">
+                            <!-- Icon size adjusted to fit nicely in the square -->
+                            <i class="fas fa-plus text-sm"></i>
+                        </button>
+                    </div>
                 </div>
-            </form>
-            <p id="modal-message" class="mt-4 text-sm text-center text-red-500 hidden"></p>
+            </div>
+
+            <!-- Right Main Panel (Takes remaining space, has consistent vertical padding (py-3)) -->
+            <div id="main-panel" class="flex-1 px-4 py-3 flex flex-col space-y-3 bg-zinc-50 overflow-y-auto">
+
+                <!-- Agent Toggles Card - Compacted Layout -->
+                <div class="bg-white p-2 shadow-sm card-base border-gray-300">
+                    <div class="flex flex-col space-y-2">
+
+                        <!-- Outreach Agent Control Section (Compact) -->
+                        <div class="w-full flex justify-between items-center pb-2 border-b border-gray-200">
+                            <span class="text-sm font-semibold text-gray-700 flex items-center whitespace-nowrap">
+                                <i class="fas fa-bullhorn mr-2 text-base text-gray-700"></i> Outreach Agent
+                            </span>
+                            <div class="flex items-center space-x-2">
+                                <!-- TOGGLE BUTTON (Play/Pause) -->
+                                <button id="outreach-toggle-btn" onclick="toggleAgentStatus('outreach')"
+                                    class="text-green-600 hover:text-green-700 transition duration-150 p-1 rounded-sm"
+                                    title="Start Outreach Agent">
+                                    <i class="fas fa-play text-base"></i>
+                                </button>
+                                <!-- STOP BUTTON -->
+                                <button id="outreach-stop-btn" onclick="stopAgent('outreach')"
+                                    class="text-red-500 hover:text-red-600 transition duration-150 p-1 rounded-sm"
+                                    title="Stop Outreach Agent">
+                                    <i class="fas fa-stop text-base"></i>
+                                </button>
+                                <!-- SETTINGS BUTTON -->
+                                <button id="outreach-settings-btn"
+                                    class="text-gray-500 hover:text-gray-700 transition duration-150 p-1 rounded-sm"
+                                    title="Outreach Settings">
+                                    <i class="fas fa-cog text-base"></i>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Auto-Reply Agent Control Section (Compact) -->
+                        <div class="w-full flex justify-between items-center pt-1">
+                            <span class="text-sm font-semibold text-gray-700 flex items-center whitespace-nowrap">
+                                <i class="fas fa-robot mr-2 text-base text-gray-700"></i> Auto-Reply Agent
+                            </span>
+                            <div class="flex items-center space-x-2">
+                                <!-- TOGGLE BUTTON (Play/Pause) -->
+                                <button id="autoreply-toggle-btn" onclick="toggleAgentStatus('autoreply')"
+                                    class="text-green-600 hover:text-green-700 transition duration-150 p-1 rounded-sm"
+                                    title="Start Auto-Reply Agent">
+                                    <i class="fas fa-play text-base"></i>
+                                </button>
+                                <!-- STOP BUTTON -->
+                                <button id="autoreply-stop-btn" onclick="stopAgent('autoreply')"
+                                    class="text-red-500 hover:text-red-600 transition duration-150 p-1 rounded-sm"
+                                    title="Stop Auto-Reply Agent">
+                                    <i class="fas fa-stop text-base"></i>
+                                </button>
+                                <!-- SETTINGS BUTTON -->
+                                <button id="autoreply-settings-btn"
+                                    class="text-gray-500 hover:text-gray-700 transition duration-150 p-1 rounded-sm"
+                                    title="Auto-Reply Settings">
+                                    <i class="fas fa-cog text-base"></i>
+                                </button>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+
+                <!-- Chatbot Interface Panel (Replaces Dashboard, Takes remaining space) -->
+                <div class="flex-1 bg-white shadow-sm card-base border-gray-300 flex flex-col overflow-hidden">
+
+                    <!-- Chat History (Scrollable Area) -->
+                    <div id="chat-history" class="flex-1 flex flex-col overflow-hidden">
+                        <!-- Chat messages or empty state will be dynamically added here -->
+                    </div>
+
+                    <!-- Chat Input Area (Fixed at bottom) -->
+                    <div class="flex-shrink-0 p-3 border-t border-gray-200 bg-gray-50">
+                        <div class="flex items-center space-x-2">
+                            <!-- Input Field -->
+                            <input type="text" id="chat-message-input"
+                                placeholder="Type a message to the active chat..."
+                                class="flex-1 px-4 py-2 border border-gray-300 rounded-sm focus:ring-gray-900 focus:border-gray-900 text-sm shadow-inner">
+
+                            <!-- Send Button (Perfect Square) -->
+                            <button id="chat-send-btn"
+                                class="w-10 h-10 bg-gray-900 text-white rounded-sm hover:bg-black transition duration-150 flex-shrink-0 border border-gray-900 shadow-md flex items-center justify-center"
+                                title="Send Message">
+                                <i class="fas fa-paper-plane text-base"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+            <!-- End Right Main Panel -->
+
+        </div>
+        <!-- End Main Content Area -->
+
+    </div>
+    <!-- End App Container -->
+
+    <!-- --- SETTINGS MODAL --- -->
+    <div id="settings-modal"
+        class="fixed inset-0 bg-gray-900 bg-opacity-75 z-50 flex items-center justify-center hidden" role="dialog"
+        aria-modal="true">
+        <div class="bg-white w-full max-w-lg p-6 shadow-2xl rounded-sm border border-gray-300">
+
+            <!-- Modal Header -->
+            <div class="flex justify-between items-center pb-3 border-b border-gray-200 mb-4">
+                <h3 id="modal-title" class="text-xl font-bold text-gray-900">Agent Settings</h3>
+                <button onclick="closeModal()"
+                    class="text-gray-400 hover:text-gray-700 transition duration-150 p-1 focus:outline-none">
+                    <i class="fas fa-times text-lg"></i>
+                </button>
+            </div>
+
+            <!-- Modal Content Wrapper (Used to switch content dynamically) -->
+            <div id="modal-content-wrapper">
+
+                <!-- 1. Outreach Agent Settings Content -->
+                <div id="outreach-settings-content" class="space-y-4 hidden">
+                    <p class="text-sm text-gray-600">Configure the list of recipients and the initial message for the
+                        bulk outreach agent.</p>
+
+                    <div>
+                        <label for="outreach-numbers" class="block text-sm font-medium text-gray-700 mb-1">Recipient
+                            Numbers (Comma-separated)</label>
+                        <textarea id="outreach-numbers" rows="3" placeholder="+15551234567, +15559876543, ..."
+                            class="w-full px-3 py-2 border border-gray-300 rounded-sm focus:ring-gray-900 focus:border-gray-900 text-sm shadow-inner"></textarea>
+                    </div>
+
+                    <div>
+                        <label for="outreach-message" class="block text-sm font-medium text-gray-700 mb-1">Message
+                            Template</label>
+                        <textarea id="outreach-message" rows="3"
+                            placeholder="Hi there, checking if you received our last email..."
+                            class="w-full px-3 py-2 border border-gray-300 rounded-sm focus:ring-gray-900 focus:border-gray-900 text-sm shadow-inner"></textarea>
+                    </div>
+
+                    <div class="pt-2 flex justify-end space-x-3">
+                        <button onclick="closeModal()"
+                            class="px-4 py-2 bg-gray-200 text-gray-700 text-sm font-medium rounded-sm hover:bg-gray-300 transition duration-150">Cancel</button>
+                        <button onclick="saveOutreachSettings()"
+                            class="px-4 py-2 bg-gray-900 text-white text-sm font-medium rounded-sm hover:bg-black transition duration-150">Save
+                            & Close</button>
+                    </div>
+                </div>
+
+                <!-- 2. Auto-Reply Agent Settings Content -->
+                <div id="autoreply-settings-content" class="space-y-4 hidden">
+                    <p class="text-sm text-gray-600">Define the core instructions and persona for the AI Auto-Reply
+                        Agent.</p>
+
+                    <div>
+                        <label for="autoreply-instructions" class="block text-sm font-medium text-gray-700 mb-1">Agent
+                            Instructions / Prompt</label>
+                        <textarea id="autoreply-instructions" rows="8"
+                            placeholder="Act as a friendly customer support representative for a small coffee business. Keep responses concise and always use emojis."
+                            class="w-full px-3 py-2 border border-gray-300 rounded-sm focus:ring-gray-900 focus:border-gray-900 text-sm shadow-inner"></textarea>
+                    </div>
+
+                    <div class="pt-2 flex justify-end space-x-3">
+                        <button onclick="closeModal()"
+                            class="px-4 py-2 bg-gray-200 text-gray-700 text-sm font-medium rounded-sm hover:bg-gray-300 transition duration-150">Cancel</button>
+                        <button onclick="saveAutoreplySettings()"
+                            class="px-4 py-2 bg-gray-900 text-white text-sm font-medium rounded-sm hover:bg-black transition duration-150">Save
+                            & Close</button>
+                    </div>
+                </div>
+
+            </div>
         </div>
     </div>
 
-    <!-- Floating Log Sidebar (NEW) -->
+
+    <!-- Floating Log Sidebar (Retains dark theme for console contrast) -->
+    <input type="checkbox" id="log-toggle-check">
     <aside id="floating-log-sidebar"
-        class="fixed top-0 right-0 h-full w-full sm:w-96 bg-gray-900 text-gray-200 shadow-2xl z-50 p-6
-        transform transition-transform duration-300 ease-in-out translate-x-full border-l-4 border-blue-400">
+        class="fixed top-0 right-0 h-full w-full sm:w-96 bg-gray-900 text-gray-200 shadow-2xl z-50 p-6 transform transition-transform duration-300 ease-in-out border-l-4 border-gray-700 translate-x-full">
 
         <div class="flex justify-between items-center mb-4 pb-2 border-b-2 border-gray-700">
             <h3 class="text-xl font-bold text-gray-100 flex items-center">
-                <i class="fas fa-terminal mr-2 text-blue-400"></i> Real-Time Log Console
+                <i class="fas fa-terminal mr-2 text-gray-400"></i> Real-Time Log Console
             </h3>
-            <button id="close-log-btn"
-                class="text-gray-400 hover:text-white transition duration-150 p-1 rounded-sm hover:bg-gray-800 focus:outline-none"
-                onclick="toggleLogVisibility(selectedSessionId)">
+            <label for="log-toggle-check"
+                class="text-gray-400 hover:text-white transition duration-150 p-1 rounded-sm hover:bg-gray-800 focus:outline-none cursor-pointer">
                 <i class="fas fa-times text-lg"></i>
-            </button>
+            </label>
         </div>
 
         <div id="sidebar-log-content" class="h-[calc(100vh-80px)] overflow-y-auto font-mono text-xs space-y-1">
-            <div class="text-gray-500 text-center pt-8">Select an active session to view the log.</div>
+            <div class="text-green-400">
+                <span class="font-mono text-[10px] text-gray-400 mr-2">[15:52:10]</span>MOCK: Log Initialized. Polling
+                will start after session verification.
+            </div>
         </div>
     </aside>
 
-    <!-- Overlay (NEW) -->
-    <div id="log-sidebar-overlay" class="fixed inset-0 bg-black opacity-0 z-40 hidden transition-opacity duration-300"
-        onclick="toggleLogVisibility(selectedSessionId)"></div>
-
     <script>
-        // MAXIMUM number of status messages to display in the log
+        let mockChats = [];
+        let totalChatCount = 0;
+        let currentSession = null; // Global session object
         const MAX_STATUS_LOG = 10;
-        // Polling interval in milliseconds (3 seconds)
-        const POLLING_INTERVAL = 3000;
+        let highlightedChatId = null; // New state variable for chat highlighting
+        let currentChatHistory = []; // NEW: Stores history of the currently displayed chat
 
-        // --- Data Definitions (State) ---
-
-        // Global state for view navigation
-        let currentView = 'LOADING'; // 'DETAIL' or 'NO_SESSIONS'
-        let selectedSessionId = null;
-
-        // Global state map to track which session is currently starting (API in progress)
-        let startingSessionState = {};
-
-        // Live sessions data (populated on load)
-        let liveSessions = [];
-
-        // Stored profiles data will be populated from the API fetch
-        let storedProfiles = [];
-
-        // Mock messages pool for the polling simulator
-        const mockPollingMessages = [
-            "Checked connection status: OK.",
-            "Processed 1 new incoming message.",
-            "Updated agent state to idle.",
-            "Heartbeat signal sent successfully.",
-            "Performing routine data sync.",
-            "Outreach queue is empty.",
-            "Logged successful activity.",
-        ];
-        let mockPollingMessageIndex = 0;
-
-        // --- Utility Functions ---
-
-        function formatUptime(ms) {
-            if (ms < 0) ms = 0;
-            const totalSeconds = Math.floor(ms / 1000);
-            const hours = String(Math.floor(totalSeconds / 3600)).padStart(2, '0');
-            const minutes = String(Math.floor((totalSeconds % 3600) / 60)).padStart(2, '0');
-            const seconds = String(totalSeconds % 60).padStart(2, '0');
-            return `${hours}:${minutes}:${seconds}`;
-        }
-
-        function formatLogEntry(message) {
-            const timeString = new Date().toLocaleTimeString('en-US', {
-                hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
-            });
-            return `<span class="font-mono text-[10px] text-gray-400 mr-2">[${timeString}]</span>${message}`;
-        }
-
-        function getShortTime() {
-             return new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
-        }
-        
-        /**
-         * Mocks sending a message and adds a log entry.
-         */
-        function sendMockMessage() {
-            const recipient = document.getElementById('recipient-number').value.trim();
-            const message = document.getElementById('chat-input').value.trim();
-            
-            if (!recipient || !message) {
-                // Use a custom modal or console log instead of alert()
-                console.log("Cannot send: Recipient or message is empty."); 
-                return;
-            }
-
-            const session = liveSessions.find(s => s.id === selectedSessionId);
-            if (session) {
-                const logMessage = `Message sent to ${recipient.substring(0, 15)}...: "${message.substring(0, 30)}..."`;
-                session.statusLog.unshift(formatLogEntry(logMessage));
-                
-                // Clear inputs
-                document.getElementById('recipient-number').value = '';
-                document.getElementById('chat-input').value = '';
-                
-                // Update log sidebar immediately if visible
-                if (session.isLogVisible) {
-                    updateSidebarLogContent(session);
-                }
-            }
-            console.log(`Mock Send: Recipient=${recipient}, Message=${message}`);
-        }
-
-
-        /**
-         * Utility function to update the content of the floating log sidebar.
-         * @param {object} session - The currently active session object.
-         */
-        function updateSidebarLogContent(session) {
-            const logContainer = document.getElementById('sidebar-log-content');
-            if (!logContainer || !session) return;
-
-            if (session.statusLog && session.statusLog.length > 0) {
-                // Map logs to HTML and update container
-                logContainer.innerHTML = session.statusLog.map(log => `<div class="text-green-400">${log}</div>`).join('');
-                // Scroll to the bottom to show the latest entry
-                logContainer.scrollTop = logContainer.scrollHeight;
-            } else {
-                logContainer.innerHTML = `<div class="text-gray-500 text-center pt-8">Log stream established...</div>`;
-            }
-        }
-
-
-        // --- Navigation ---
-
-        function navigateTo(view, sessionId = null) {
-            // Hide the floating log when navigating to a new view/session
-            if (currentView === 'DETAIL' && selectedSessionId) {
-                const prevSession = liveSessions.find(s => s.id === selectedSessionId);
-                if (prevSession) {
-                    prevSession.isLogVisible = false; // Set previous session state to hidden
-                }
-            }
-            // Manually ensure the floating sidebar is visually hidden
-            document.getElementById('floating-log-sidebar')?.classList.add('translate-x-full');
-            document.getElementById('log-sidebar-overlay')?.classList.add('hidden', 'opacity-0');
-            document.getElementById('log-sidebar-overlay')?.classList.remove('opacity-50');
-
-            currentView = view;
-            selectedSessionId = sessionId;
-            renderApp();
-        }
-
-        // --- API Handlers (MOCK ACTIVE) ---
-
-        const MOCK_API_RESPONSE_GET_PROFILES = {
-            "success": true,
-            "profiles": [
-                { "encoded_session_id": "test-001_sales", "base_uuid": "test-001_sales", "profile_name": "Sales Flow", "is_active": false },
-                { "encoded_session_id": "e148df19-1cd0-42ea-b9f1-fa3edefd45e5", "base_uuid": "e148df19-1cd0-42ea-b9f1-fa3edefd45e5", "profile_name": "Marketing Campaign 2024", "is_active": false },
-                { "encoded_session_id": "3e17e7f2-2981-4ee8-904f-879f06972cc3_acount1", "base_uuid": "3e17e7f2-2981-4ee8-904f-879f06972cc3_acount1", "profile_name": "Weekly Digest Sender", "is_active": false },
-                { "encoded_session_id": "55125007-3c63-4d59-bf19-548af3818b1c", "base_uuid": "55125007-3c63-4d59-bf19-548af3818b1c", "profile_name": "HR Onboarding Automation", "is_active": false }
-            ],
-            "count": 4
+        // New state for agent control
+        let agentStatus = {
+            outreach: { isRunning: false, name: 'Outreach Agent' },
+            autoreply: { isRunning: false, name: 'Auto-Reply Agent' }
         };
 
-        async function fetchLiveSessions() {
-            await new Promise(resolve => setTimeout(resolve, 300));
-            const NOW = Date.now();
-            const MOCK_TIME = '15:52:10';
+        // Constants for DOM elements
+        const chatHistoryContainer = document.getElementById('chat-history');
+        const chatListContainer = document.getElementById('chat-list-container');
+        const countElement = document.getElementById('active-numbers-count');
+        const chatInput = document.getElementById('chat-message-input');
+        const chatSendBtn = document.getElementById('chat-send-btn');
+        const addNumberBtn = document.getElementById('add-number-btn');
+        const logContentContainer = document.getElementById('sidebar-log-content');
+        const statusDot = document.querySelector('.status-dot');
+        const statusText = document.getElementById('session-status-text');
 
-            const initialLiveSessionsData = [
-                {
-                    id: 'p3-1',
-                    name: 'Dev & Testing',
-                    status: 'INITIALIZING',
-                    icon: 'fas fa-spinner fa-spin',
-                    running: true,
-                    startTime: NOW,
-                    isPaused: false,
-                    isLogVisible: false, // Default hidden for floating sidebar
-                    qrCodeUrl: 'https://placehold.co/150x150/000000/ffffff?text=QR+CODE',
-                    isQrReady: true,
-                    agents: { outreach: true, autoreply: false },
-                    statusLog: [
-                        `<span class="font-mono text-[10px] text-gray-400 mr-2">[${MOCK_TIME}]</span>Phase 1: Initializing browser environment.`,
-                        `<span class="font-mono text-[10px] text-gray-400 mr-2">[${MOCK_TIME}]</span>Phase 2: Awaiting QR Scan...`,
-                        `<span class="font-mono text-[10px] text-gray-400 mr-2">[${MOCK_TIME}]</span>Status: High-priority data sync started.`
-                    ],
-                    activeNumbers: ['+1 (555) 123-4567', '+1 (555) 987-6543', '+1 (555) 111-2222', '+1 (555) 333-4444', '+1 (555) 555-6666', '+1 (555) 777-8888', '+1 (555) 999-0000']
-                },
-                {
-                    id: 'p3-2',
-                    name: 'Customer Support Bot',
-                    status: 'CONNECTING',
-                    icon: 'fas fa-wifi',
-                    running: true,
-                    startTime: NOW - (2 * 60 * 1000),
-                    isPaused: false,
-                    isLogVisible: false, // Default hidden for floating sidebar
-                    qrCodeUrl: 'https://placehold.co/150x150/000000/ffffff?text=QR+CODE',
-                    isQrReady: false,
-                    agents: { outreach: false, autoreply: true },
-                    statusLog: [
-                        `<span class="font-mono text-[10px] text-gray-400 mr-2">[${MOCK_TIME}]</span>Targeting US-based numbers.`,
-                        `<span class="font-mono text-[10px] text-gray-400 mr-2">[${MOCK_TIME}]</span>Queue check: 4 pending conversations.`,
-                        `<span class="font-mono text-[10px] text-gray-400 mr-2">[${MOCK_TIME}]</span>Agent configuration loaded successfully.`
-                    ],
-                    activeNumbers: ['+44 20 7946 0999', '+44 7700 900222', '+44 7700 900555']
-                },
-            ];
+        // Modal Elements
+        const settingsModal = document.getElementById('settings-modal');
+        const modalTitle = document.getElementById('modal-title');
+        const outreachSettingsContent = document.getElementById('outreach-settings-content');
+        const autoreplySettingsContent = document.getElementById('autoreply-settings-content');
 
-            return { "success": true, "sessions": initialLiveSessionsData, "count": initialLiveSessionsData.length };
-        }
-
-        async function mockFetchSessionStatus(sessionId) {
-            await new Promise(resolve => setTimeout(resolve, 50));
-            const logMessage = mockPollingMessages[mockPollingMessageIndex % mockPollingMessages.length];
-            mockPollingMessageIndex++;
-
-            let status = 'RUNNING';
-            let icon = 'fas fa-circle-notch fa-spin';
-            if (sessionId.includes('bot')) {
-                status = 'ACTIVE: BOT';
-                icon = 'fas fa-robot';
-            }
-            return {
-                "success": true,
-                "data": { "status": status, "icon": icon, "last_log": logMessage }
-            };
-        }
-
-        async function mockCreateSession(profileName, headless) {
-            await new Promise(resolve => setTimeout(resolve, 1500));
-            const newId = `c${Date.now()}-${Math.floor(Math.random() * 9999)}`;
-            const sessionId = `${newId}||${btoa(profileName.replace(/\s/g, '_'))}`;
-
-            const NOW = Date.now();
-            const MOCK_TIME = new Date(NOW).toLocaleTimeString('en-US', {
-                hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
-            });
-
-            // Add new session to liveSessions array
-            liveSessions.unshift({
-                id: sessionId,
-                name: profileName,
-                status: 'INITIALIZING',
-                icon: 'fas fa-spinner fa-spin',
-                running: true,
-                startTime: NOW,
-                isPaused: false,
-                isLogVisible: false, // Default hidden for floating sidebar
-                qrCodeUrl: 'https://placehold.co/150x150/000000/ffffff?text=QR+CODE',
-                isQrReady: true,
-                agents: { outreach: true, autoreply: true }, // Default both agents on for new profile
-                statusLog: [
-                    `<span class="font-mono text-[10px] text-gray-400 mr-2">[${MOCK_TIME}]</span>Session created and driver requested.`,
-                    `<span class="font-mono text-[10px] text-gray-400 mr-2">[${MOCK_TIME}]</span>Awaiting connection status...`
-                ],
-                activeNumbers: ['+1 (555) 100-2000'] // Default number for new session
-            });
-
-            // Set navigation to the new session
-            navigateTo('DETAIL', sessionId);
-
-            return { "success": true, "message": "Session created...", "data": { "session_id": sessionId, "profile_name": profileName } };
-        }
-
-        async function mockResumeSession(sessionId, headless) {
-            await new Promise(resolve => setTimeout(resolve, 1500));
-            const profileToResume = storedProfiles.find(p => p.id === sessionId);
-
-            if (!profileToResume) { return { success: false, message: `Session ID '${sessionId}' not found.` }; }
-
-            const NOW = Date.now();
-            const MOCK_TIME = new Date(NOW).toLocaleTimeString('en-US', {
-                hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
-            });
-
-            // Add a new mock live session entry
-            liveSessions.unshift({
-                id: sessionId,
-                name: profileToResume.name,
-                status: 'INITIALIZING',
-                icon: 'fas fa-spinner fa-spin',
-                running: true,
-                startTime: NOW,
-                isPaused: false,
-                isLogVisible: false, // Default hidden for floating sidebar
-                qrCodeUrl: 'https://placehold.co/150x150/000000/ffffff?text=QR+CODE',
-                isQrReady: false,
-                agents: { outreach: true, autoreply: true }, // Default both agents on when resuming
-                statusLog: [
-                    `<span class="font-mono text-[10px] text-gray-400 mr-2">[${MOCK_TIME}]</span>Session resume requested.`,
-                    `<span class="font-mono text-[10px] text-gray-400 mr-2">[${MOCK_TIME}]</span>Starting browser driver in ${headless ? 'headless' : 'visible'} mode.`
-                ],
-                activeNumbers: ['+1 (555) 000-0000'] // Default number for resumed session
-            });
-            // Set navigation to the new session
-            navigateTo('DETAIL', sessionId);
+        // Agent Button Elements
+        const outreachToggleBtn = document.getElementById('outreach-toggle-btn');
+        const autoreplyToggleBtn = document.getElementById('autoreply-toggle-btn');
 
 
-            return { "success": true, "message": "Session resumed successfully.", "data": { "session_id": sessionId } };
-        }
-
-        async function mockStopSession(sessionId) {
-            const index = liveSessions.findIndex(s => s.id === sessionId);
-            if (index !== -1) {
-                const sessionToStop = liveSessions.splice(index, 1)[0];
-                const isAlreadyStored = storedProfiles.some(p => p.id === sessionId);
-                if (!isAlreadyStored) {
-                     storedProfiles.push({ encoded_session_id: sessionId, base_uuid: sessionId, profile_name: sessionToStop.name, is_active: false });
-                }
-            }
-
-            // New navigation logic: Go to the first remaining session or the No Sessions view
-            if (liveSessions.length > 0) {
-                 navigateTo('DETAIL', liveSessions[0].id);
-            } else {
-                 navigateTo('NO_SESSIONS');
-            }
-
-            return { "success": true, "message": "Session stopped (profile saved)", "data": null };
-        }
-
-        // Mock function to toggle pause state
-        async function togglePauseSession(sessionId) {
-            const sessionIndex = liveSessions.findIndex(s => s.id === sessionId);
-            if (sessionIndex !== -1) {
-                liveSessions[sessionIndex].isPaused = !liveSessions[sessionIndex].isPaused;
-                // Add a log entry for the pause/resume action
-                const action = liveSessions[sessionIndex].isPaused ? 'paused' : 'resumed';
-                liveSessions[sessionIndex].statusLog.unshift(formatLogEntry(`Session logic ${action}.`));
-            }
-            // Re-render to update the button and status
-            renderApp();
-            return { "success": true, "message": `Session ${sessionId} ${action}.` };
-        }
-
+        // --- Agent Control Functions ---
 
         /**
-         * Toggles the visibility of the floating log sidebar.
-         * @param {string} sessionId - The ID of the current session to update state for.
+         * Toggles the running status of an agent (Start/Pause) and calls the necessary API endpoint.
+         * Includes validation checks using localStorage for agent configuration data.
+         * @param {('outreach'|'autoreply')} agentType - The type of agent to toggle.
          */
-        function toggleLogVisibility(sessionId) {
-            const session = liveSessions.find(s => s.id === sessionId);
-            if (!session) return;
-            
-            session.isLogVisible = !session.isLogVisible;
+async function toggleAgentStatus(agentType) {
+    console.log("=== toggleAgentStatus CALLED ===", { agentType });
 
-            const sidebar = document.getElementById('floating-log-sidebar');
-            const overlay = document.getElementById('log-sidebar-overlay');
-            const toggleBtn = document.getElementById(`log-toggle-btn-${sessionId}`);
+    const agent = agentStatus[agentType];
+    console.log("Current agent state:", agent);
 
-            if (session.isLogVisible) {
-                // Show Sidebar
-                sidebar.classList.remove('translate-x-full');
-                overlay.classList.remove('hidden', 'opacity-0');
-                overlay.classList.add('opacity-50');
-                if (toggleBtn) {
-                    toggleBtn.classList.remove('text-gray-500', 'border-gray-300', 'hover:bg-gray-100');
-                    toggleBtn.classList.add('text-blue-600', 'border-blue-400', 'hover:bg-blue-100');
-                }
-                // Populate log content when opening
-                updateSidebarLogContent(session);
-            } else {
-                // Hide Sidebar
-                sidebar.classList.add('translate-x-full');
-                overlay.classList.remove('opacity-50');
-                overlay.classList.add('hidden', 'opacity-0');
-                if (toggleBtn) {
-                    toggleBtn.classList.add('text-gray-500', 'border-gray-300', 'hover:bg-gray-100');
-                    toggleBtn.classList.remove('text-blue-600', 'border-blue-400', 'hover:bg-blue-100');
-                }
-            }
-            
-            // Add a log entry for the action (optional, but good for tracking)
-            const action = session.isLogVisible ? 'shown' : 'hidden';
-            session.statusLog.unshift(formatLogEntry(`Log console visibility toggled to ${action}.`));
-        }
+    const button = agentType === 'outreach' ? outreachToggleBtn : autoreplyToggleBtn;
+    const icon = button.querySelector('i');
 
-        // New function to toggle agent state
-        function toggleAgent(sessionId, agentType) {
-            const session = liveSessions.find(s => s.id === sessionId);
-            if (session && session.agents && session.agents.hasOwnProperty(agentType)) {
-                session.agents[agentType] = !session.agents[agentType];
+    let bodyData = {};
 
-                // Add a log entry for the action
-                const status = session.agents[agentType] ? 'ACTIVATED' : 'DEACTIVATED';
-                const agentName = agentType.charAt(0).toUpperCase() + agentType.slice(1);
-                session.statusLog.unshift(formatLogEntry(`${agentName} Agent ${status}.`));
+    // =====================================================================
+    // STARTING AGENT
+    // =====================================================================
+    if (!agent.isRunning) {
+        console.log("[START] Agent is currently NOT running → Attempting to START");
 
-                // Re-render only the current detail view for responsiveness
-                renderApp();
-            }
-        }
+        if (agentType === "autoreply") {
+            const airesponse = localStorage.getItem("airesponse");
+            console.log("Retrieved airesponse from localStorage:", airesponse);
 
-        async function fetchStoredProfiles() {
-            try {
-                const response = MOCK_API_RESPONSE_GET_PROFILES;
-                if (response.success) {
-                    storedProfiles = response.profiles.map(p => ({
-                        id: p.encoded_session_id, name: p.profile_name, isActive: p.is_active
-                    }));
-                }
-            } catch (error) {
-                console.error("Error in fetchStoredProfiles:", error);
-            }
-            // Only render stored profiles if we are in the NO_SESSIONS view
-            if (currentView === 'NO_SESSIONS') {
-                renderStoredProfiles();
-            }
-        }
-
-
-        // --- Rendering Functions ---
-
-        /**
-         * Renders the simplified stored profile list within the No Sessions View.
-         */
-        function renderStoredProfiles() {
-            const storedGrid = document.getElementById('stored-profiles-grid');
-            if (!storedGrid) return; // Guard against detail view
-
-            const activeIds = new Set(liveSessions.map(s => s.id));
-            const availableProfiles = storedProfiles.filter(p => !activeIds.has(p.id));
-
-            if (availableProfiles.length === 0) {
-                storedGrid.innerHTML = `<p class="text-xs text-gray-400 py-2">No profiles saved.</p>`;
+            if (!airesponse) {
+                alert("Required settings are missing. Please check your configuration.");
+                addLiveStatus(currentSession.id, `<span class="text-red-400">ERROR: Autoreply instructions not found.</span>`);
                 return;
             }
 
-            const simpleCardHtml = (profile) => {
-                const isStarting = startingSessionState[profile.id] || false;
-                return `
-                    <div id="simple-card-${profile.id}"
-                        class="bg-gray-100 p-2 rounded-sm transition duration-150 flex justify-between items-center cursor-pointer border border-gray-300 ${isStarting ? 'starting-session' : 'hover:bg-gray-200 hover:border-gray-500'}"
-                        onclick="${isStarting ? '' : `attemptResumeSession('${profile.id}', true)`}">
-                        <span class="text-xs font-medium text-gray-800 truncate">${profile.name}</span>
-                        <i class="${isStarting ? 'fas fa-spinner fa-spin text-gray-600' : 'fas fa-play text-gray-500'} text-xs ml-2"></i>
-                    </div>
-                `;
-            };
+            bodyData.ai_instruction = airesponse;
 
-            storedGrid.innerHTML = availableProfiles.map(simpleCardHtml).join('');
+        } else if (agentType === "outreach") {
+            agentType === "auto_outreach"
+            const list_of_contact = JSON.parse(localStorage.getItem("list_of_contact") || "[]");
+            const messageTemplate = localStorage.getItem("messageTemplate");
+
+            console.log("Retrieved outreach contact list:", list_of_contact);
+            console.log("Retrieved message template:", messageTemplate);
+
+            if (!list_of_contact.length || !messageTemplate) {
+                alert("Required settings are missing. Please check your configuration.");
+                addLiveStatus(currentSession.id, `<span class="text-red-400">ERROR: Contact list or message template missing.</span>`);
+                return;
+            }
+
+            bodyData.list_of_contact = list_of_contact;
+            bodyData.messageTemplate = messageTemplate;
         }
 
-        function renderNoSessionsView() {
-            return `
-                
-<header class="flex justify-between items-center px-6 py-4 border-b border-gray-300 bg-white rounded-sm shadow-md">
-                    <div class="flex items-center space-x-4">
-                        <h1 class="text-xl font-semibold text-gray-900 tracking-tight">AGENT.OS - No Active Sessions</h1>
-                    </div>
-                    
-<button id="new-profile-btn"
-                        class="action-btn bg-gray-900 text-white hover:bg-black shadow-lg transition-transform duration-150 border border-gray-900"
-                        title="Create New Profile" onclick="document.getElementById('new-profile-modal').classList.remove('hidden')">
-                        <i class="fas fa-plus text-lg"></i>
-                    </button>
-                </header>
+        // -----------------------------
+        // REAL API CALL - ENABLE AGENT
+        // -----------------------------
+        try {
+            const apiUrl = `/api/sessions/${encodeURIComponent(currentSession.id)}/agents/${agentType}/enable`;
+            console.log("[ENABLE] API URL:", apiUrl);
+            console.log("[ENABLE] Sending body:", bodyData);
 
-                <div class="p-6 pt-0 min-h-[75vh] flex items-center justify-center">
-                    <div class="text-center p-8 bg-gray-50 border-2 border-gray-300 card-base max-w-sm shadow-xl">
-                        <i class="fas fa-exclamation-triangle text-4xl text-gray-500 mb-4"></i>
-                        <h3 class="text-xl font-bold text-gray-800 mb-2">No Sessions Found</h3>
-                        <p class="text-gray-600 mb-4">Launch an agent using a new profile or resume a stored session below.</p>
-                        <button onclick="document.getElementById('new-profile-modal').classList.remove('hidden')"
-                            class="px-4 py-2 text-sm font-medium bg-gray-800 text-white rounded-sm hover:bg-black transition duration-150 border-2 border-gray-800">
-                            <i class="fas fa-rocket mr-2"></i> Launch New Profile
-                        </button>
-                        
-                        
-<div id="stored-profiles-container" class="mt-4">
-                            <h4 class="text-xs font-semibold text-gray-500 mb-2 border-t pt-2 mt-4 border-gray-300">Stored Profiles</h4>
-                            <div id="stored-profiles-grid" class="grid grid-cols-1 gap-2 text-xs">
-                                <p class="text-gray-400">Loading stored profiles...</p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            `;
+            addLiveStatus(currentSession.id, `<span class="text-gray-400">POST ${apiUrl} — enabling...</span>`);
+
+            const res = await fetch(apiUrl, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(bodyData)
+            });
+
+            console.log("[ENABLE] Raw Response Object:", res);
+
+            if (!res.ok) {
+                const text = await res.text();
+                console.error("[ENABLE] HTTP Error:", res.status, text);
+                throw new Error(`HTTP ${res.status}: ${text}`);
+            }
+
+            const data = await res.json();
+            console.log("[ENABLE] Parsed JSON Response:", data);
+
+            if (!data.success) {
+                console.error("[ENABLE] Backend responded with error:", data.message);
+                addLiveStatus(currentSession.id, `<span class="text-red-400">ERROR ENABLE: ${data.message}</span>`);
+                return;
+            }
+
+            console.log("[ENABLE] SUCCESS:", data.message);
+            addLiveStatus(currentSession.id, `<span class="text-green-400">${data.message}</span>`);
+
+        } catch (err) {
+            console.error("[ENABLE] CATCH ERROR:", err);
+            addLiveStatus(currentSession.id, `<span class="text-red-400">API ERROR (enable): ${err.message}</span>`);
+            return;
+        }
+    }
+
+    // =====================================================================
+    // PAUSING AGENT
+    // =====================================================================
+    if (agent.isRunning) {
+        console.log("[PAUSE] Agent IS running → Attempting to PAUSE");
+
+        try {
+            const apiUrl = `/api/sessions/${encodeURIComponent(currentSession.id)}/agents/${agentType}/pause`;
+            console.log("[PAUSE] API URL:", apiUrl);
+
+            addLiveStatus(currentSession.id, `<span class="text-gray-400">POST ${apiUrl} — pausing...</span>`);
+
+            const res = await fetch(apiUrl, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" }
+            });
+
+            console.log("[PAUSE] Raw Response Object:", res);
+
+            if (!res.ok) {
+                const text = await res.text();
+                console.error("[PAUSE] HTTP Error:", res.status, text);
+                throw new Error(`HTTP ${res.status}: ${text}`);
+            }
+
+            const data = await res.json();
+            console.log("[PAUSE] Parsed JSON Response:", data);
+
+            if (!data.success) {
+                console.error("[PAUSE] Backend responded with error:", data.message);
+                addLiveStatus(currentSession.id, `<span class="text-red-400">ERROR PAUSE: ${data.message}</span>`);
+                return;
+            }
+
+            console.log("[PAUSE] SUCCESS:", data.message);
+            addLiveStatus(currentSession.id, `<span class="text-yellow-400">${data.message}</span>`);
+
+        } catch (err) {
+            console.error("[PAUSE] CATCH ERROR:", err);
+            addLiveStatus(currentSession.id, `<span class="text-red-400">API ERROR (pause): ${err.message}</span>`);
+            return;
+        }
+    }
+
+    // =====================================================================
+    // UI UPDATE
+    // =====================================================================
+    console.log("Updating UI — agent status flipping:", {
+        oldState: agent.isRunning,
+        newState: !agent.isRunning
+    });
+
+    agent.isRunning = !agent.isRunning;
+
+    if (agent.isRunning) {
+        console.log("UI: Agent is now RUNNING");
+        icon.className = 'fas fa-pause text-base';
+        button.title = `Pause ${agent.name}`;
+        button.classList.replace('text-green-600', 'text-blue-500');
+        button.classList.replace('hover:text-green-700', 'hover:text-blue-600');
+
+        addLiveStatus(currentSession.id, `<span class="text-green-400">AGENT RUNNING: ${agent.name}</span>`);
+
+    } else {
+        console.log("UI: Agent is now PAUSED");
+        icon.className = 'fas fa-play text-base';
+        button.title = `Start ${agent.name}`;
+        button.classList.replace('text-blue-500', 'text-green-600');
+        button.classList.replace('hover:text-blue-600', 'hover:text-green-700');
+
+        addLiveStatus(currentSession.id, `<span class="text-yellow-400">AGENT PAUSED: ${agent.name}</span>`);
+    }
+
+    console.log("=== toggleAgentStatus COMPLETED ===");
+}
+
+
+
+        /**
+         * Stops the agent completely (resets it to the initial paused state) by calling the disable endpoint.
+         * @param {('outreach'|'autoreply')} agentType - The type of agent to stop.
+         */
+     async function stopAgent(agentType) {
+    const agent = agentStatus[agentType];
+
+    // =============
+    // REAL API CALL
+    // =============
+    try {
+        const apiUrl = `/api/sessions/${encodeURIComponent(currentSession.id)}/agents/${agentType}/disable`;
+
+        addLiveStatus(
+            currentSession.id,
+            `<span class="text-gray-400">POST ${apiUrl} — disabling agent...</span>`
+        );
+
+        const res = await fetch(apiUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" }
+        });
+
+        if (!res.ok) {
+            const text = await res.text();
+            throw new Error(`HTTP ${res.status}: ${text}`);
         }
 
-        function renderSessionDetailView(session) {
-            const uptime = formatUptime(Date.now() - session.startTime);
-            const isPaused = session.isPaused;
-            const isLogVisible = session.isLogVisible;
-            const detailedStatus = session.status.toUpperCase().replace(':', ' - ');
+        const data = await res.json();
 
-            return `
-                
-<header class="flex justify-between items-center px-4 py-3 border-b border-gray-300 bg-white rounded-t-sm shadow-md">
-                    <div class="flex justify-between w-full items-center space-x-4">
-                        
-                        <h1 class="text-xl font-semibold text-gray-900 tracking-tight">${session.name}</h1>
+        if (!data.success) {
+            addLiveStatus(
+                currentSession.id,
+                `<span class="text-red-400">ERROR DISABLE: ${data.message}</span>`
+            );
+            return;
+        }
 
-                        
-<div class="flex items-center space-x-3">
-                            <!-- Minimal Stop Button (Squared, Icon Only) -->
-                            <button onclick="stopSession('${session.id}')"
-                                class="action-btn bg-white text-red-600 border-2 border-red-500 hover:bg-red-100"
-                                title="Stop Session & Save Profile">
-                                <i class="fas fa-power-off text-sm"></i>
-                            </button>
+        addLiveStatus(
+            currentSession.id,
+            `<span class="text-red-400">${data.message}</span>`
+        );
 
-                            <!-- Minimal Pause/Resume Button (Squared, Icon Only) -->
-                            <button onclick="togglePauseSession('${session.id}')"
-                                class="action-btn bg-white ${isPaused ? 'text-green-600 border-2 border-green-500 hover:bg-green-100' : 'text-gray-700 border-2 border-gray-500 hover:bg-gray-100'}"
-                                title="${isPaused ? 'Resume Session Logic' : 'Pause Session Logic'}">
-                                <i class="fas ${isPaused ? 'fa-play' : 'fa-pause'} text-sm"></i>
-                            </button>
+    } catch (err) {
+        addLiveStatus(
+            currentSession.id,
+            `<span class="text-red-400">API ERROR (disable): ${err.message}</span>`
+        );
+        return;
+    }
 
-                            <!-- Minimal Log Toggle Button (Squared, Icon Only) - Controls the FLOATING SIDEBAR -->
-                            <button onclick="toggleLogVisibility('${session.id}')" id="log-toggle-btn-${session.id}"
-                                class="action-btn bg-white ${isLogVisible ? 'text-blue-600 border-2 border-blue-500 hover:bg-blue-100' : 'text-gray-500 border-2 border-gray-400 hover:bg-gray-100'}"
-                                title="${isLogVisible ? 'Hide Live Log' : 'Show Live Log'}">
-                                <i class="fas fa-terminal text-sm"></i>
-                            </button>
-                        </div>
-                    </div>
-                </header>
-<div class="p-4 pt-0  flex ">
-                 <div class=" h-full border shadow-lg ">
+    // =============
+    // UPDATE UI
+    // =============
+    if (agent.isRunning) {
+        agent.isRunning = false;
 
-                     <div class=" bg-white p-3 shadow-lg border border-gray-300 mb-4 rounded-sm">
-                        <div class="flex justify-between items-center space-x-6">
-                            
-                            <!-- Outreach Agent Toggle -->
-                            <div class="flex-1 flex justify-between items-center border-r pr-6 border-gray-200">
-                                <span class="text-sm font-medium text-gray-700">Outreach Agent</span>
-                                <button onclick="toggleAgent('${session.id}', 'outreach')" id="outreach-toggle-${session.id}"
-                                    class="agent-toggle-btn w-10 h-6 flex items-center transition duration-200 p-0.5 rounded-sm ${session.agents.outreach ? 'bg-green-600' : 'bg-gray-300'}">
-                                    <div
-                                        class="w-5 h-5 bg-white rounded-sm shadow-md transform transition-transform duration-200 ${session.agents.outreach ? 'translate-x-4' : 'translate-x-0'}">
-                                    </div>
-                                </button>
-                            </div>
-                            
-                            <!-- Auto-Reply Agent Toggle -->
-                            <div class="flex-1 flex justify-between items-center pl-6">
-                                <span class="text-sm font-medium text-gray-700">Auto-Reply Agent</span>
-                                <button onclick="toggleAgent('${session.id}', 'autoreply')" id="autoreply-toggle-${session.id}"
-                                    class="agent-toggle-btn w-10 h-6 flex items-center transition duration-200 p-0.5 rounded-sm ${session.agents.autoreply ? 'bg-green-600' : 'bg-gray-300'}">
-                                    <div
-                                        class="w-5 h-5 bg-white rounded-sm shadow-md transform transition-transform duration-200 ${session.agents.autoreply ? 'translate-x-4' : 'translate-x-0'}">
-                                    </div>
-                                </button>
-                            </div>
-                            
-                         
-                        </div>
-                    </div>
-                      <!-- Main Content Area: Vertical Number List and Chat Inputs -->
-                        <div class="flex-1 bg-white rounded-sm shadow-xl border border-gray-300 flex flex-col h-[70vh]">
+        const button = agentType === 'outreach' ? outreachToggleBtn : autoreplyToggleBtn;
+        const icon = button.querySelector('i');
 
-this element will those list of number  when the 
-                    </div>
+        // Reset to play button
+        icon.className = 'fas fa-play text-base';
+        button.title = `Start ${agent.name}`;
+
+        // Colors back to idle state
+        button.classList.replace('text-blue-500', 'text-green-600');
+        button.classList.replace('hover:text-blue-600', 'hover:text-green-700');
+    }
+
+    console.log(`${agent.name} STOPPED and DISABLED.`);
+
+    addLiveStatus(
+        currentSession.id,
+        `<span class="text-red-400">AGENT: ${agent.name} is now fully disabled.</span>`
+    );
+}
 
 
+        /**
+         * Ensures all agent buttons are correctly set to their initial PAUSED state.
+         */
+        function initializeAgentButtons() {
+            // Since the HTML already defaults the icons to 'fa-play' (Start),
+            // we just need to confirm the state logic reflects this default.
 
+            // Outreach
+            outreachToggleBtn.querySelector('i').className = 'fas fa-play text-base';
+            outreachToggleBtn.title = 'Start Outreach Agent';
+            outreachToggleBtn.classList.add('text-green-600', 'hover:text-green-700');
 
-
-                    
-                    </div>
-<div class="p-4 pt-0 ">
-                    
-                    
-                   
-
-
-                    
-                        <!-- Main Content Area: Vertical Number List and Chat Inputs -->
-                        <div class="flex-1 bg-white rounded-sm shadow-xl border border-gray-300 flex flex-col h-full">
-                            
-                            <!-- Header -->
-                            <div class="p-2 border-b border-gray-300 bg-gray-100 flex justify-between items-center flex-shrink-0">
-                                <span class="text-sm font-medium text-gray-800">
-                                    <i class="fas fa-hashtag mr-2 text-blue-500"></i> Active WhatsApp Numbers (${session.activeNumbers.length})
-                                </span>
-                                <span class="text-xs text-gray-400">Status: ${detailedStatus}</span>
-                            </div>
-
-                            <!-- Vertical Number List Container (Now scrollable) -->
-                            <div class="p-3 overflow-y-auto flex-1 flex flex-col space-y-2">
-                                ${session.activeNumbers.map(number => `
-                                    <div class="numbers_item flex-shrink-0 bg-gray-100 p-2 rounded-sm shadow-sm border border-gray-200 transition duration-150 hover:bg-gray-200 cursor-pointer text-sm font-mono text-gray-700">
-                                        <i class="fas fa-mobile-alt mr-2 text-blue-500"></i> ${number}
-                                    </div>
-                                `).join('')}
-                            </div>
-
-                            <!-- New Messaging Input Section -->
-                            <div class="p-3 border-t border-gray-300 flex-shrink-0 bg-gray-100">
-                                <div class="mb-3">
-                                    <label for="recipient-number" class="block text-xs font-medium text-gray-600 mb-1">Recipient Number</label>
-                                    <input type="text" id="recipient-number" placeholder="+1 (555) 555-5555"
-                                           class="w-full px-3 py-2 border-2 border-gray-400 rounded-sm focus:ring-gray-900 focus:border-gray-900 text-sm shadow-inner">
-                                </div>
-                                <div class="flex space-x-2">
-                                    <input type="text" id="chat-input" placeholder="Type your message here..."
-                                           class="flex-1 px-3 py-2 border-2 border-gray-400 rounded-sm focus:ring-gray-900 focus:border-gray-900 text-sm shadow-inner">
-                                    <button onclick="sendMockMessage()"
-                                            class="bg-gray-900 text-white px-4 py-2 rounded-sm hover:bg-black transition duration-150 flex-shrink-0 border-2 border-gray-900 shadow-md">
-                                        <i class="fas fa-paper-plane mr-1"></i> Send
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-
-                    
-                </div>
-                </div>
-
-            `;
+            // Auto-Reply
+            autoreplyToggleBtn.querySelector('i').className = 'fas fa-play text-base';
+            autoreplyToggleBtn.title = 'Start Auto-Reply Agent';
+            autoreplyToggleBtn.classList.add('text-green-600', 'hover:text-green-700');
         }
 
 
-        // --- Interaction Handlers ---
+        // --- Session Management & Polling Infrastructure (Unchanged) ---
 
-        async function attemptResumeSession(sessionId, headless = true) {
-            if (startingSessionState[sessionId]) return;
+        /**
+         * Function to simulate session validation.
+         */
+        async function getValidSessionId() {
+            const urlParams = new URLSearchParams(window.location.search);
+            let sessionId = urlParams.get("id");
 
-            startingSessionState[sessionId] = true;
-            renderStoredProfiles();
+            // If no ID → redirect
+            if (!sessionId || sessionId.trim() === "" || sessionId === "null") {
+                console.warn("No session ID in URL.");
+                console.log("404 redirect");
+                return null;
+            }
 
             try {
-                const response = await mockResumeSession(sessionId, headless);
+                console.log(`Verifying session ID: ${sessionId}`);
 
-                if (response.success) {
-                    // mockResumeSession now handles updating liveSessions and navigating
-                    // No need for explicit navigation here, as it's handled in mockResumeSession
-                } else {
-                    console.error("Resume failed:", response.message);
-                }
-            } catch (error) {
-                console.error("Network error during resume:", error);
-            } finally {
-                delete startingSessionState[sessionId];
-                // Since successful resume calls navigateTo('DETAIL'), we only need to re-render if it failed
-                if (currentView === 'NO_SESSIONS') {
-                    renderStoredProfiles();
-                }
-            }
-        }
+                // Encode the session ID safely (important for characters like ||)
+                const encodedId = encodeURIComponent(sessionId);
 
-        async function stopSession(sessionId) {
-            const result = await mockStopSession(sessionId);
-            if (!result.success) {
-                console.error("Failed to stop session:", result.message);
-            }
-            // Navigation handled inside mockStopSession
-        }
-
-
-        // --- Polling & Initialization ---
-
-        function updateUptimes() {
-             // Update detail view uptime
-             if (currentView === 'DETAIL' && selectedSessionId) {
-                const session = liveSessions.find(s => s.id === selectedSessionId);
-                const uptimeSpan = document.getElementById(`detail-uptime-${selectedSessionId}`);
-                if (session && uptimeSpan && session.running) {
-                    uptimeSpan.textContent = formatUptime(Date.now() - session.startTime);
-                }
-             }
-        }
-
-        async function pollLiveSessionStatuses() {
-            updateUptimes();
-
-            // Only poll if we have live sessions
-            if (liveSessions.length === 0) return;
-
-            for (const session of liveSessions) {
-                try {
-                    const response = await mockFetchSessionStatus(session.id);
-
-                    if (response.success) {
-                        const { status, icon, last_log } = response.data;
-                        session.status = status;
-                        session.icon = icon;
-
-                        const logEntry = formatLogEntry(last_log);
-                        if (!session.statusLog.includes(logEntry)) {
-                            session.statusLog.unshift(logEntry);
-                            if (session.statusLog.length > MAX_STATUS_LOG) {
-                                session.statusLog.pop();
-                            }
-                        }
-
-                        // Optimization: Directly update the log content if on this session's detail view AND log is visible
-                        if (currentView === 'DETAIL' && selectedSessionId === session.id) {
-                            const currentSession = liveSessions.find(s => s.id === selectedSessionId);
-                            if (currentSession.isLogVisible) {
-                                updateSidebarLogContent(currentSession); // Use the utility function to update the floating log
-                            }
-                        }
-                    } else {
-                        console.warn(`Failed to get status for ${session.id}: ${response.message}`);
+                // Correct API path
+                const res = await fetch(`/api/sessions/verify/${encodedId}`, {
+                    method: "GET",
+                    headers: {
+                        "Accept": "application/json"
                     }
-                } catch (error) {
-                    console.error(`Error polling status for ${session.id}:`, error);
+                });
+
+                if (!res.ok) {
+                    console.warn(`Failed verification. Status: ${res.status}`);
+                    console.log("404 redirect");
+                    return null;
                 }
+
+                const data = await res.json();
+                console.log("Session verified:", data);
+
+                // Optional: validate success flag
+                if (!data.success) {
+                    console.log("Invalid session → redirect");
+                    return null;
+                }
+
+                return sessionId;
+
+            } catch (err) {
+                console.error("Error verifying session:", err);
+                console.log("404 redirect");
+                return null;
             }
         }
 
-        function renderApp() {
-            const appContainer = document.getElementById('app');
-            if (currentView === 'LOADING') {
-                 // Placeholder, already set in the body
-            } else if (currentView === 'NO_SESSIONS') {
-                appContainer.innerHTML = renderNoSessionsView();
-                renderStoredProfiles(); // Render stored profiles immediately after view is set up
-            } else if (currentView === 'DETAIL' && selectedSessionId) {
-                const session = liveSessions.find(s => s.id === selectedSessionId);
-                if (session) {
-                    appContainer.innerHTML = renderSessionDetailView(session);
+        // --- Chat History Mocking (Unchanged) ---
 
-                    // Ensure the floating log button reflects the state immediately after rendering the header
-                    // We call it twice to ensure the visual state of the button/sidebar is correctly synchronized with session.isLogVisible
-                    toggleLogVisibility(session.id); 
-                    toggleLogVisibility(session.id); 
-                } else {
-                    navigateTo('NO_SESSIONS');
-                }
-            }
-        }
+        async function mockFetchChatHistory(chatId) {
+            console.log(`MOCK API CALL: Fetching history for chat ID: ${chatId}`);
+            await new Promise(resolve => setTimeout(resolve, 300)); // Simulate API delay
 
-        async function init() {
-            // 1. Fetch initial data
-            const liveResponse = await fetchLiveSessions();
-            if (liveResponse.success) {
-                liveSessions = liveResponse.sessions;
-            }
-
-            // 2. Determine initial view
-            if (liveSessions.length > 0) {
-                currentView = 'DETAIL';
-                selectedSessionId = liveSessions[0].id;
+            // Define mock history based on chat ID
+            let history;
+            if (chatId === 'chat_0') {
+                history = [
+                    { sender: 'other', text: 'Hello, how can I help you today? I see you are an automated agent.' },
+                    { sender: 'self', text: 'I need information about my account. I was auto-highlighted after sending this.' },
+                    { sender: 'other', text: 'Certainly! Could you please provide your account number? We are happy to assist.' },
+                    { sender: 'self', text: 'My account number is 987654321. Thank you!' }
+                ];
+            } else if (chatId === 'chat_1') {
+                history = [
+                    { sender: 'other', text: 'Thanks for your message! I will get back to you soon.' },
+                    { sender: 'self', text: 'No problem, thanks for the update.' }
+                ];
+            } else if (chatId === 'chat_4') {
+                history = [
+                    { sender: 'other', text: 'Ticket #500 resolved: New feature deployed successfully.' },
+                    { sender: 'self', text: 'Excellent news! Thanks team.' }
+                ];
             } else {
-                currentView = 'NO_SESSIONS';
+                history = [
+                    { sender: 'other', text: `This is a generic conversation for chat ${chatId}.` },
+                    { sender: 'self', text: 'Testing the chat highlight and display functionality.' }
+                ];
             }
 
-            // 3. Fetch stored profiles (needed for NO_SESSIONS view)
-            await fetchStoredProfiles();
-
-            // 4. Render the initial view
-            renderApp();
-
-            // 5. Start the polling timer
-            setInterval(pollLiveSessionStatuses, POLLING_INTERVAL);
+            return history;
         }
 
-        // --- Modal Handlers (Adapted for Monochrome) ---
-        const modal = document.getElementById('new-profile-modal');
-        const closeModalBtn = document.getElementById('close-modal-btn');
-        const newProfileForm = document.getElementById('new-profile-form');
-        const modalMessage = document.getElementById('modal-message');
 
-        if (closeModalBtn) {
-            closeModalBtn.addEventListener('click', () => {
-                modal.classList.add('hidden');
+        // --- Polling Mock Utilities (Updated fetchSessionMessages) ---
+        let mockMessageCounter = 0;
+
+        function formatLogEntry(message) {
+            const timestamp = new Date().toLocaleTimeString('en-US', { hour12: false });
+            // Add a container div to ensure the timestamp is prepended correctly in addLiveStatus
+            return `<div class="text-white"><span class="font-mono text-[10px] text-gray-400 mr-2">[${timestamp}]</span> ${message}</div>`;
+        }
+
+        function getStatusIcon(status) {
+            if (status.includes("CONNECTED")) return 'fas fa-check-circle text-green-500';
+            if (status.includes("IDLE") || status.includes("INITIALIZING")) return 'fas fa-sync-alt text-blue-400';
+            return 'fas fa-cog text-gray-400';
+        }
+
+        function updateLiveSessionStatus(id, message, icon) {
+            // Update the main header status display
+            const iconClass = icon.split(' ').slice(2).join(' '); // Get color class
+            statusDot.className = `status-dot mr-1 ${iconClass}`;
+            statusText.textContent = currentSession.status;
+
+            // Also push to the log
+            addLiveStatus(id, `<span class="text-blue-400"><i class="${icon} mr-2"></i>STATUS: ${message}</span>`, false); // Don't format again
+        }
+
+        function addLiveStatus(id, htmlContent, shouldFormat = true) {
+            const logDiv = document.createElement('div');
+            logDiv.innerHTML = shouldFormat ? formatLogEntry(htmlContent) : htmlContent;
+
+            // Log messages are prepended to appear newest at the top
+            logContentContainer.prepend(logDiv.firstChild);
+
+            // Prune old logs
+            while (logContentContainer.children.length > 20) {
+                logContentContainer.removeChild(logContentContainer.lastChild);
+            }
+        }
+
+        function renderDashboard() {
+            // This mock function updates the status text and dot based on the global session state
+            const icon = currentSession.icon;
+            updateLiveSessionStatus(currentSession.id, currentSession.status, icon);
+        }
+
+        async function fetchSessionMessages(sessionId, since = null) {
+            const url = since
+                ? `/api/sessions/${encodeURIComponent(sessionId)}/messages?since=${encodeURIComponent(since)}`
+                : `/api/sessions/${encodeURIComponent(sessionId)}/messages`;
+
+            const response = await fetch(url, {
+                method: "GET",
+                headers: { "Accept": "application/json" }
+            });
+
+            if (!response.ok) {
+                throw new Error(`Failed to fetch messages: ${response.status}`);
+            }
+
+            const data = await response.json();
+            return data.messages || [];
+        }
+
+
+
+async function sessionPolling(session) {
+
+    if (!session.running || session.isPaused) {
+        return;
+    }
+
+    addLiveStatus(session.id, `<span class="text-gray-500">POLL: Starting API check for updates...</span>`);
+
+    try {
+
+        // REAL API returns only an array of messages
+        const messages = await fetchSessionMessages(session.id);
+
+
+        if (!Array.isArray(messages) || messages.length === 0) {
+            console.warn(`[sessionPolling] ⚠️ No messages found for session ${session.id}`);
+            addLiveStatus(session.id, `<span class="text-gray-500">POLL: No new messages.</span>`);
+            return;
+        }
+
+        // Take last 3 messages
+        const latestMessages = messages.slice(-3).reverse();
+
+
+        for (const msg of latestMessages) {
+
+            switch (msg.type) {
+                case "status":
+                    handleStatusMessage(session, msg);
+                    break;
+                case "log":
+                    handleLogMessage(session, msg);
+                    break;
+                case "action":
+                    await handleActionMessage(session, msg);
+                    break;
+                default:
+                    console.warn(`[sessionPolling] Unknown message type`, msg);
+            }
+        }
+
+        // Limit logs
+        if (session.statusLog.length > MAX_STATUS_LOG) {
+            session.statusLog = session.statusLog.slice(0, MAX_STATUS_LOG);
+        }
+
+        renderDashboard();
+
+        addLiveStatus(session.id, `<span class="text-green-500">POLL: Completed successfully.</span>`);
+
+    } catch (error) {
+        console.error(`[sessionPolling] 🚨 NETWORK ERROR during poll for ${session.id}`, error);
+        addLiveStatus(session.id, `<span class="text-red-500">NETWORK FAILED</span>`);
+    }
+}
+
+
+        // 🟢 HANDLERS (Unchanged)
+        function handleStatusMessage(session, msg) {
+            console.log(`[handleStatusMessage] Handling STATUS message for ${session.id}`, msg);
+            const { state, message, progress } = msg.content;
+
+            session.status = state?.toUpperCase() || "UNKNOWN";
+            session.icon = getStatusIcon(session.status);
+            updateLiveSessionStatus(session.id, message, session.icon);
+        }
+
+        function handleLogMessage(session, msg) {
+            console.log(`[handleLogMessage] Handling LOG message for ${session.id}`, msg);
+            const { message, level } = msg.content;
+            const levelClass = level === 'WARN' ? 'text-yellow-400' : level === 'ERROR' ? 'text-red-400' : 'text-gray-300';
+            const formatted = `<span class="${levelClass}">[${level?.toUpperCase() || "INFO"}] ${message}</span>`;
+
+            // Update session log array (used for history)
+            session.statusLog.unshift(formatted);
+
+            // Update the visible log console
+            addLiveStatus(session.id, formatted);
+        }
+
+        async function handleActionMessage(session, msg) {
+            console.log(`[handleActionMessage] Handling ACTION message for ${session.id}`, msg);
+            const { action_type, message, chat_id } = msg.content;
+
+            console.log(`[handleActionMessage] ℹ️ Action detected: ${action_type} - ${message}`);
+
+            if (action_type === 'CHAT_OPENED') {
+                const chatIdToHighlight = chat_id;
+
+                // 1. Update the global state
+                highlightedChatId = chatIdToHighlight;
+
+                // 2. Re-render the chat list to apply highlight style
+                updateChatList();
+
+                // 3. Fetch chat history
+                const chatHistory = await mockFetchChatHistory(chatIdToHighlight);
+
+                // 4. Display the chat history
+                showChat(chatHistory);
+
+                // 5. Log the action completion
+                addLiveStatus(session.id, `<span class="text-yellow-300">ACTION: Chat ${chatIdToHighlight} highlighted and displayed.</span>`);
+            }
+        }
+
+
+        // --- Message Display and Sending Functions ---
+
+        /**
+         * Creates and appends a message bubble to the chat history container.
+         * @param {string} text - The message content.
+         * @param {('self'|'other')} sender - Who sent the message.
+         * @param {boolean} shouldScroll - Whether to scroll to the bottom.
+         */
+        function displayNewMessage(text, sender, shouldScroll = true) {
+            const isSelf = sender === 'self';
+
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `flex ${isSelf ? 'justify-end' : 'justify-start'}`;
+
+            const bubble = document.createElement('div');
+            bubble.className = `chat-bubble text-sm ${isSelf ? 'chat-bubble-self' : 'chat-bubble-other'}`;
+            bubble.textContent = text;
+
+            messageDiv.appendChild(bubble);
+            chatHistoryContainer.appendChild(messageDiv);
+
+            if (shouldScroll) {
+                // Ensure scroll behavior is smooth and immediate
+                chatHistoryContainer.scrollTop = chatHistoryContainer.scrollHeight;
+            }
+        }
+
+        /**
+         * Simulates sending a message from the panel user to the currently highlighted chat.
+         */
+        function handleChatSend() {
+            const messageText = chatInput.value.trim();
+            if (messageText === "") return;
+
+            if (!highlightedChatId) {
+                console.warn(`Cannot send message: "${messageText}". No chat is currently selected.`);
+                addLiveStatus(currentSession.id, `<span class="text-yellow-400">WARNING: Select a chat (e.g., chat_0) before attempting to send a message.</span>`);
+                return;
+            }
+
+            // 1. Simulate API call / local processing (MOCK)
+            console.log(`MOCK SEND: Sending message to chat ${highlightedChatId} from self: "${messageText}"`);
+
+            // 2. Add to mock history (Update the current session's history array)
+            currentChatHistory.push({ sender: 'self', text: messageText });
+
+            // 3. Display the new message immediately to the user
+            displayNewMessage(messageText, 'self', true);
+
+            // 4. Clear the input
+            chatInput.value = '';
+
+            // 5. Log the action
+            addLiveStatus(currentSession.id, `<span class="text-blue-400">SENT: Message sent to ${highlightedChatId}.</span>`);
+        }
+
+
+        // --- Modal Control Functions (Updated to use localStorage) ---
+        function openModal(agentType) {
+            // Hide both content sections first
+            outreachSettingsContent.classList.add('hidden');
+            autoreplySettingsContent.classList.add('hidden');
+
+            if (agentType === 'outreach') {
+                modalTitle.textContent = "Outreach Agent Settings";
+                outreachSettingsContent.classList.remove('hidden');
+            } else if (agentType === 'auto-reply') {
+                modalTitle.textContent = "Auto-Reply Agent Settings";
+                autoreplySettingsContent.classList.remove('hidden');
+            }
+
+            settingsModal.classList.remove('hidden');
+        }
+
+        function closeModal() {
+            settingsModal.classList.add('hidden');
+            // Mock function call to simulate saving/closing action
+            console.log("Settings modal closed.");
+        }
+
+        function saveOutreachSettings() {
+            const numbersText = document.getElementById('outreach-numbers').value;
+            const message = document.getElementById('outreach-message').value;
+
+            // Convert comma-separated string to array for list_of_contact, filtering out empty strings
+            const list_of_contact = numbersText.split(',').map(n => n.trim()).filter(n => n.length > 0);
+
+            // Save to localStorage (required by toggleAgentStatus)
+            localStorage.setItem("list_of_contact", JSON.stringify(list_of_contact));
+            localStorage.setItem("messageTemplate", message);
+
+            console.log("MOCK SAVE: Outreach Settings Saved to localStorage.");
+            addLiveStatus(currentSession.id, `<span class="text-green-500">SETTINGS: Outreach configuration saved successfully.</span>`);
+            closeModal();
+        }
+
+        function saveAutoreplySettings() {
+            const instructions = document.getElementById('autoreply-instructions').value;
+
+            // Save to localStorage (required by toggleAgentStatus)
+            localStorage.setItem("airesponse", instructions);
+
+            console.log("MOCK SAVE: Auto-Reply Settings Saved to localStorage.");
+            addLiveStatus(currentSession.id, `<span class="text-green-500">SETTINGS: Auto-Reply configuration saved successfully.</span>`);
+            closeModal();
+        }
+
+        /**
+         * Loads settings from localStorage into the modal inputs on initialization.
+         */
+        function loadAgentSettingsFromLocalStorage() {
+            // Load Outreach Settings
+            const list_of_contact_str = localStorage.getItem("list_of_contact");
+            const messageTemplate = localStorage.getItem("messageTemplate");
+            if (list_of_contact_str) {
+                // Convert stored JSON array back to comma-separated string for the textarea
+                const numbersText = JSON.parse(list_of_contact_str).join(', ');
+                document.getElementById('outreach-numbers').value = numbersText;
+            }
+            if (messageTemplate) {
+                document.getElementById('outreach-message').value = messageTemplate;
+            }
+
+            // Load Auto-Reply Settings
+            const airesponse = localStorage.getItem("airesponse");
+            if (airesponse) {
+                document.getElementById('autoreply-instructions').value = airesponse;
+            }
+        }
+
+        // --- Core Chat Rendering and Initialization Functions (Mostly Unchanged) ---
+
+        /**
+         * Displays the empty state when no chat is selected.
+         */
+        function showEmptyChatState() {
+            // Store empty history
+            currentChatHistory = [];
+
+            // Ensure classes are set for proper centering
+            chatHistoryContainer.className = 'flex-1 flex flex-col items-center justify-center p-8 text-center overflow-hidden';
+            chatHistoryContainer.innerHTML = `
+                <div class="text-gray-500 space-y-3">
+                    <i class="fas fa-comments text-4xl text-gray-300"></i>
+                    <p class="text-lg font-semibold">No Chat Selected</p>
+                    <p class="text-sm">Awaiting agent action or manual selection. Active chat will appear here.</p>
+                </div>
+            `;
+        }
+
+        /**
+         * Clears the chat interface and displays the conversation history for the selected chat.
+         */
+        function showChat(conversationHistory) {
+            chatHistoryContainer.innerHTML = '';
+
+            // Store history globally for the sender to update
+            currentChatHistory = conversationHistory || [];
+
+            if (!conversationHistory || conversationHistory.length === 0) {
+                showEmptyChatState();
+                return;
+            }
+
+            // Reset classes for chat display mode
+            chatHistoryContainer.className = 'flex-1 overflow-y-auto p-4 space-y-4 flex flex-col';
+
+            // Loop through stored history and render using the new helper
+            currentChatHistory.forEach(msg => {
+                displayNewMessage(msg.text, msg.sender, false); // Don't scroll until the end
+            });
+
+            setTimeout(() => {
+                chatHistoryContainer.scrollTop = chatHistoryContainer.scrollHeight;
+            }, 0);
+        }
+        async function fetchChats(sessionId) {
+            try {
+                const url = `http://127.0.0.1:8000/api/sessions/${encodeURIComponent(sessionId)}/whatsapp/chats`;
+
+                console.log("Calling real API:", url);
+
+                const response = await fetch(url, {
+                    method: "GET",
+                    headers: {
+                        "accept": "application/json"
+                    }
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const data = await response.json();
+
+                // Update your global state variables
+                mockChats = data.chats;
+                totalChatCount = data.total_count;
+
+                return data;
+
+            } catch (error) {
+                console.error("Error fetching chats:", error);
+                return { success: false, error: error.message };
+            }
+        }
+
+
+
+
+        async function mockFetchChats() {
+            console.log("Mock API call: Fetching /whatsapp/chats...");
+            await new Promise(resolve => setTimeout(resolve, 500));
+
+            const initialMockData = {
+                "success": true,
+                "chats": [
+                    { "id": "chat_0", "ranking": 1, "isPinned": true, "title": "+91 96538 10273", "recentMessage": "Hello, how can I help you today?" },
+                    { "id": "chat_1", "ranking": 2, "isPinned": false, "title": "Suraj Raika", "recentMessage": "Thanks for your message! I'll get back to you soon." },
+                    { "id": "chat_2", "ranking": 3, "isPinned": false, "title": "Papa Ji", "recentMessage": "d & f block elements -Reasoning Questions.pdf • 20 pages" },
+                    { "id": "chat_4", "ranking": 5, "isPinned": true, "title": "Team Alpha Support", "recentMessage": "Ticket #500 resolved: New feature deployed successfully." }
+                ],
+                "total_count": 4
+            };
+
+            mockChats = initialMockData.chats;
+            totalChatCount = initialMockData.total_count;
+
+            return initialMockData;
+        }
+
+        function updateChatList() {
+            if (mockChats.length === 0) {
+                chatListContainer.innerHTML = `<div class="p-3 text-red-500 text-center font-medium">No active chats found.</div>`;
+                countElement.textContent = "(0)";
+                return;
+            }
+
+            countElement.textContent = `(${totalChatCount})`;
+            chatListContainer.innerHTML = '';
+
+            mockChats.forEach((chat) => {
+                const item = createChatItem(chat);
+                chatListContainer.appendChild(item);
             });
         }
 
-        if (newProfileForm) {
-            newProfileForm.addEventListener('submit', async (e) => {
-                e.preventDefault();
+        function createChatItem(chat) {
 
-                const formData = new FormData(newProfileForm);
-                const profileName = formData.get('profileName');
-                const launchMode = formData.get('launchMode');
-                const headless = launchMode === 'headless';
+            const isHighlighted = chat.id === highlightedChatId; // Check if it's the highlighted chat
 
-                const submitButton = newProfileForm.querySelector('button[type="submit"]');
-                submitButton.disabled = true;
-                submitButton.innerHTML = `<i class="fas fa-spinner fa-spin mr-2"></i> Starting...`;
-                modalMessage.classList.add('hidden');
+            // Base classes for the chat item
+            const baseClasses = "numbers_item flex-shrink-0 py-2 px-3 transition duration-150 text-sm";
 
-                try {
-                    const response = await mockCreateSession(profileName, headless);
+            // Default styling for non-highlighted items
+            let currentClasses = "font-medium text-gray-700 bg-white";
 
-                    if (response.success) {
-                        modal.classList.add('hidden');
-                        // mockCreateSession now handles updating liveSessions and navigating to the new session
-                    } else {
-                        modalMessage.textContent = response.message || 'Failed to create session.';
-                        modalMessage.classList.remove('hidden');
-                    }
-                } catch (error) {
-                    modalMessage.textContent = 'Network error: Could not reach the API.';
-                    modalMessage.classList.remove('hidden');
-                    console.error("Create session error:", error);
-                } finally {
-                    submitButton.disabled = false;
-                    submitButton.innerHTML = `<i class="fas fa-rocket mr-2"></i> Launch`;
+            // Highlighting style for the selected item
+            if (isHighlighted) {
+                currentClasses = "bg-gray-200 font-bold text-gray-900 border-l-4 border-gray-900 shadow-inner";
+            }
+
+
+            const item = document.createElement('div');
+            item.className = `${baseClasses} ${currentClasses}`;
+            item.setAttribute('data-chat-id', chat.id);
+
+            const iconColor = 'text-gray-400';
+
+            const icon = `<i class="fas fa-mobile-alt mr-2 ${iconColor}"></i>`;
+
+            const truncatedMessage = chat.recentMessage.length > 30
+                ? chat.recentMessage.substring(0, 30) + '...'
+                : chat.recentMessage;
+
+            const messagePreview = `<span class="block text-[10px] text-gray-500 truncate mt-0.5 ml-5">${truncatedMessage}</span>`;
+
+            item.innerHTML = `
+                <div class="flex items-center">
+                    ${icon}
+                    ${chat.title} 
+                    ${chat.isPinned ? '<i class="fas fa-thumbtack text-gray-500 text-[8px] ml-auto" title="Pinned Chat"></i>' : ''}
+                </div>
+                ${messagePreview}
+            `;
+            return item;
+        }
+
+        function handleAddNumber() {
+            const messageContent = "New chat initialized.";
+            const recipientNumber = document.getElementById('recipient-number').value.trim();
+
+            if (!recipientNumber) {
+                console.error('Validation Error: Please enter a recipient number to add.');
+                return;
+            }
+
+            console.log(`Adding new number to list: ${recipientNumber}`);
+
+            const existingChatIndex = mockChats.findIndex(chat => chat.title === recipientNumber);
+
+            if (existingChatIndex !== -1) {
+                const existingChat = mockChats[existingChatIndex];
+                existingChat.recentMessage = "Chat re-initialized.";
+                mockChats.splice(existingChatIndex, 1);
+                mockChats.unshift(existingChat);
+            } else {
+                const newChat = {
+                    id: `chat_${Date.now()}`,
+                    ranking: 0,
+                    isPinned: false,
+                    title: recipientNumber,
+                    recentMessage: messageContent
+                };
+
+                mockChats.unshift(newChat);
+                totalChatCount++;
+            }
+
+            updateChatList();
+            showEmptyChatState();
+            document.getElementById('recipient-number').value = '';
+        }
+
+        // Initial setup and event listeners on window load
+        window.onload = async function () {
+            // 1. Validate Session ID first
+            const sessionId = await getValidSessionId();
+            if (!sessionId) {
+                console.error("Application initialization halted due to invalid session ID.");
+                chatHistoryContainer.innerHTML = '<div class="text-center p-10 text-red-500">SESSION ERROR: Please check console for details.</div>';
+                return;
+            }
+            window.sessionId = sessionId;
+
+            console.log(`Session ID ${sessionId} confirmed. Initializing application.`);
+
+            // 2. Initialize the global session object
+            currentSession = {
+                id: sessionId,
+                running: true, // Start running
+                isPaused: false,
+                status: "IDLE",
+                icon: getStatusIcon("IDLE"),
+                statusLog: [],
+            };
+            renderDashboard(); // Initial render of status area
+
+            // 3. Start Polling Interval (every 3 seconds)
+            setInterval(() => sessionPolling(currentSession), 3000);
+
+            // 4. Fetch initial mock chat data and render the list
+            await fetchChats(window.sessionId);
+            updateChatList();
+
+            // 5. Initially show the empty chat state
+            showEmptyChatState();
+
+            // 6. Attach event listeners
+            addNumberBtn.addEventListener('click', handleAddNumber);
+            chatSendBtn.addEventListener('click', handleChatSend); // UPDATED
+            chatInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    handleChatSend();
                 }
             });
-        }
-        // Initialize the app when the window loads
-        window.onload = init;
+
+            // 7. Initialize agent buttons to their default (Paused/Play icon) state
+            initializeAgentButtons();
+
+            // 8. Load persistent settings from localStorage
+            loadAgentSettingsFromLocalStorage();
+
+            // 9. Attach Modal Listeners
+            document.getElementById('outreach-settings-btn').addEventListener('click', () => openModal('outreach'));
+            document.getElementById('autoreply-settings-btn').addEventListener('click', () => openModal('auto-reply'));
+
+            // Make functions globally accessible for inline onclick attributes
+            window.closeModal = closeModal;
+            window.saveOutreachSettings = saveOutreachSettings;
+            window.saveAutoreplySettings = saveAutoreplySettings;
+            window.toggleAgentStatus = toggleAgentStatus;
+            window.stopAgent = stopAgent;
+        };
     </script>
+
 </body>
 
 </html>

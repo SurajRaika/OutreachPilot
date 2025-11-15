@@ -1,12 +1,12 @@
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query , Body
 from typing import Optional
 from models import CreateSessionRequest, SessionActionRequest, SessionResponse, AgentType, AgentConfig
 from manager import session_manager
 from automation_actions import AutomationActions
 import os
 from manager import session_manager, SessionManager
-from models import SessionStatus, AgentType
+from models import SessionStatus, AgentType , EnableAgentRequest
 import asyncio
 
 router = APIRouter()
@@ -133,6 +133,10 @@ async def delete_session(session_id: str):
         return SessionResponse(success=True, message="Session deleted")
     raise HTTPException(status_code=404, detail="Session not found")
 
+
+
+
+
 @router.get("/sessions/list")
 async def list_active_sessions():
     """List active sessions with profile names and session IDs"""
@@ -148,11 +152,14 @@ async def list_active_sessions():
         })
     return {"success": True, "sessions": formatted, "count": len(formatted)}
 
-
-@router.get("/sessions/verify/{session_id}")
+@router.get("/sessions/verify/{session_id:path}")
 async def verify_session(session_id: str):
-    """Verify if a session exists"""
-    session = session_manager.get_session(session_id)
+    """Verify if a session exists using list_sessions"""
+    sessions = session_manager.list_sessions()
+    
+    # Find the session in the list
+    session = next((s for s in sessions if s["session_id"] == session_id), None)
+
     if session:
         return {
             "success": True,
@@ -161,11 +168,17 @@ async def verify_session(session_id: str):
             "profile_name": session.get("profile_name"),
             "status": session.get("status"),
         }
+
     return {
         "success": False,
         "message": "Session not found",
         "session_id": session_id
     }
+
+
+
+
+
 
 
 @router.get("/sessions/profiles")
@@ -224,22 +237,59 @@ async def get_qr_code(session_id: str):
     result = await AutomationActions.get_qr_code_if_logout(session)
     return result
 
-# Agent Management
 @router.post("/sessions/{session_id}/agents/{agent_type}/enable")
-async def enable_agent(session_id: str, agent_type: str, config: Optional[dict] = None):
-    """Enable agent"""
+async def enable_agent(
+    session_id: str,
+    agent_type: str,
+    config: EnableAgentRequest = Body(...)
+    ):
+    """Enable agent with optional configuration"""
+    
+    # Retrieve session
     session = session_manager.get_session(session_id)
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
     
     try:
+        # Try to map agent type to enum
         agent_enum = AgentType(agent_type)
-        await session.enable_agent(agent_enum, config)
-        return SessionResponse(success=True, message=f"Agent {agent_type} enabled")
+        
+        # Extract parameters from the request body (if available)
+        list_of_contact = config.list_of_contact if config else []
+        messageTemplate = config.messageTemplate if config else ""
+        ai_instruction = config.ai_instruction if config else ""
+        
+        # Enable agent with the provided configuration
+        success = await session.enable_agent(agent_enum, list_of_contact, messageTemplate, ai_instruction)
+        
+        # Return success or failure message
+        if success:
+            return {"success": True, "message": f"Agent {agent_type} enabled"}
+        else:
+            raise HTTPException(status_code=500, detail="Failed to enable the agent")
+
     except ValueError:
         raise HTTPException(status_code=400, detail=f"Invalid agent type: {agent_type}. Must be 'autoreply' or 'auto_outreach'")
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+# POST /sessions/{session_id}/agents/{agent_type}/enable
+# Content-Type: application/json
+
+# class AgentType(str, Enum):
+#     AUTOREPLY = "autoreply"
+#     AUTO_OUTREACH = "auto_outreach"
+# {
+#   "list_of_contact": ["contact1@example.com", "contact2@example.com"],
+#   "messageTemplate": "Hello, this is your automated message.",
+#   "ai_instruction": "Use formal tone."
+# }
+# response is  return {"success": True, "message": f"Agent {agent_type} enabled"}
+
+
+
+
+
 
 @router.post("/sessions/{session_id}/agents/{agent_type}/disable")
 async def disable_agent(session_id: str, agent_type: str):

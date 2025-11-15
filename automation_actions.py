@@ -295,12 +295,16 @@ class AutomationActions:
 
         @staticmethod
         async def SendMessage(session: AutomationSession, msg: str) -> dict:
-            """Send a message in the currently open WhatsApp chat."""
             try:
                 if not session.driver:
                     return {"success": False, "error": "Driver not initialized"}
 
-                # ✅ Focus on message input
+                # Validate connection
+                try:
+                    session.driver.execute_script("return 1")
+                except:
+                    return {"success": False, "error": "WebDriver session lost"}
+
                 input_box = WebDriverWait(session.driver, 10).until(
                     EC.presence_of_element_located((
                         By.CSS_SELECTOR,
@@ -308,12 +312,8 @@ class AutomationActions:
                     ))
                 )
                 ActionChains(session.driver).move_to_element(input_box).click().perform()
-                await asyncio.sleep(0.5)
                 input_box.send_keys(msg)
-                await asyncio.sleep(0.5)
-                session.add_message("log", {"action": "focus_and_type", "state": "done"})
 
-                # ✅ Find and click the send button (3-level parent)
                 send_button = session.driver.execute_script("""
                     const input = arguments[0];
                     let parent = input;
@@ -321,17 +321,17 @@ class AutomationActions:
                     return parent.querySelector("div[role='button'][aria-label='Send']");
                 """, input_box)
 
-                if send_button:
-                    session.driver.execute_script("arguments[0].click();", send_button)
-                    session.add_message("action", {"type": "send_message", "state": "sent"})
-                    return {"success": True, "state": "message_sent", "message": msg}
+                if not send_button:
+                    return {"success": False, "error": "Send button not found"}
 
-                session.add_message("error", {"action": "send_message", "error": "Send button not found"})
-                return {"success": False, "error": "Send button not found"}
+                session.driver.execute_script("arguments[0].click();", send_button)
+                return {"success": True, "state": "message_sent", "message": msg}
 
             except Exception as e:
-                session.add_message("error", {"action": "send_message", "error": str(e)})
-                return {"success": False, "error": str(e)}
+                return {"success": False, "error": f"Exception: {e}"}
+
+
+
 
         @staticmethod
         async def CloseCurrentChat(session) -> dict:
@@ -391,14 +391,10 @@ class AutomationActions:
 
 
         @staticmethod
-        async def SendAndCloseChat(session: AutomationSession,  msg: str) -> dict:
+        async def SendAndCloseChat(session: AutomationSession, msg: str) -> dict:
             """
-            Initiates a WhatsApp chat, sends a message, and closes the chat in one sequence.
-
-            Steps:
-            1. Open a new chat with the given number.
-            2. Send the provided message.
-            3. Close the current chat window.
+            Initiates a WhatsApp chat, sends a message with retry, and closes the chat.
+            Retries sending message up to 3 times if it fails.
             """
 
             results = {
@@ -407,18 +403,31 @@ class AutomationActions:
                 "close": None
             }
 
+            max_attempts = 3
+            send_result = None
+
             try:
 
-                # Step 2️⃣: Send the message
-                send_result = await AutomationActions.SendMessage(session, msg)
-                results["send"] = send_result
+                # Step 2️⃣: Send the message with retry
+                for attempt in range(1, max_attempts + 1):
+                    send_result = await AutomationActions.SendMessage(session, msg)
+                    results["send"] = send_result
 
-                if not send_result.get("success"):
+                    if send_result.get("success"):
+                        session.add_message("log", {"action": "send_message", "attempt": attempt, "state": "success"})
+                        break  # Stop retry loop
+                    else:
+                        session.add_message("warning", {"action": "send_message", "attempt": attempt, "state": "failed"})
+                        await asyncio.sleep(1)  # optional backoff delay
+
+                # If after all attempts still failed
+                if not send_result or not send_result.get("success"):
                     return {
                         "success": False,
                         "step": "send_message",
                         "details": send_result,
-                        "error": send_result.get("error", "Message not sent")
+                        "error": send_result.get("error", "Message not sent after retries"),
+                        "attempts": max_attempts
                     }
 
                 session.add_message("log", {"action": "sequence", "step": "message_sent"})
@@ -437,12 +446,11 @@ class AutomationActions:
 
                 session.add_message("log", {"action": "sequence", "step": "chat_closed"})
 
-                # ✅ All steps successful
+                # ✅ Complete
                 return {
                     "success": True,
                     "state": "complete",
                     "steps": results,
-                    "number": number,
                     "message": msg
                 }
 
@@ -707,250 +715,180 @@ class AutomationActions:
                 return {"success": False, "error": str(e)}
 
         @staticmethod
-        async def open_unread_chats(session: "AutomationSession", click_delay: float = 1.0, verify_ids: bool = True) -> dict:
-            """
-            Find all unread chats using Selenium, click them to open, and log their chat IDs.
-            Optionally verifies chat ID consistency before opening.
-            
-            Args:
-                session: AutomationSession instance
-                click_delay: Delay in seconds between clicking chats (default: 1.0)
-                verify_ids: Whether to verify chat IDs before opening (default: True)
-            
-            Returns:
-                dict with success status, list of opened chats with IDs, and count
-            """
-            try:
-                if not session.driver:
-                    session.add_message("error", {"message": "Driver not initialized"})
-                    return {"success": False, "error": "Driver not initialized"}
+        async def open_unread_chat(session: "AutomationSession", click_delay: float = 1.0, verify_ids: bool = True) -> dict:
+                """
+                Find the first unread chat using Selenium, click it to open, and log its chat ID.
+                Optionally verifies chat ID consistency before opening.
                 
-                # Verify chat IDs consistency if requested
-                if verify_ids:
-                    session.add_message("log", {"message": "Verifying chat IDs before opening unread chats..."})
-                    verification = await AutomationActions.verify_chat_ids(session)
-                    if not verification["success"]:
-                        session.add_message("warning", {"message": "Chat ID verification failed, proceeding anyway"})
-                    elif not verification["consistent"]:
-                        session.add_message("warning", {
-                            "message": "Some chat IDs are inconsistent",
-                            "missing_ids": verification["missing_ids"]
-                        })
+                Args:
+                    session: AutomationSession instance
+                    click_delay: Delay in seconds before returning (default: 1.0)
+                    verify_ids: Whether to verify chat IDs before opening (default: True)
                 
-                # Wait for chat list to be present
+                Returns:
+                    dict with success status and opened chat ID
+                """
                 try:
-                    chat_list = WebDriverWait(session.driver, 10).until(
-                        EC.presence_of_element_located((By.CSS_SELECTOR, '[aria-label="Chat list"]'))
-                    )
-                except TimeoutException:
-                    session.add_message("error", {"message": "Chat list not found"})
-                    return {"success": False, "error": "Chat list not found - user may not be logged in"}
-                
-                # Get all chat rows
-                try:
-                    chat_rows = chat_list.find_elements(By.CSS_SELECTOR, '[role="row"]')
-                except NoSuchElementException:
-                    session.add_message("error", {"message": "No chat rows found"})
-                    return {"success": False, "error": "No chat rows found"}
-                
-                if len(chat_rows) == 0:
-                    session.add_message("status", {"message": "Chat list is empty"})
-                    return {"success": True, "opened_chats": [], "total_count": 0, "total_unread": 0}
-                
-                unread_chats = []
-                
-                # Find all unread chats using Selenium
-                for index, row in enumerate(chat_rows):
+                    if not session.driver:
+                        session.add_message("error", {"message": "Driver not initialized"})
+                        return {"success": False, "error": "Driver not initialized"}
+                    
+                    # Verify chat IDs consistency if requested
+                    if verify_ids:
+                        session.add_message("log", {"message": "Verifying chat IDs before opening unread chat..."})
+                        verification = await AutomationActions.verify_chat_ids(session)
+                        if not verification["success"]:
+                            session.add_message("warning", {"message": "Chat ID verification failed, proceeding anyway"})
+                        elif not verification["consistent"]:
+                            session.add_message("warning", {
+                                "message": "Some chat IDs are inconsistent",
+                                "missing_ids": verification["missing_ids"]
+                            })
+                    
+                    # Wait for chat list to be present
                     try:
-                        # Check for unread message counter
-                        unread_count_element = None
+                        chat_list = WebDriverWait(session.driver, 10).until(
+                            EC.presence_of_element_located((By.CSS_SELECTOR, '[aria-label="Chat list"]'))
+                        )
+                    except TimeoutException:
+                        session.add_message("error", {"message": "Chat list not found"})
+                        return {"success": False, "error": "Chat list not found - user may not be logged in"}
+                    
+                    # Get all chat rows
+                    try:
+                        chat_rows = chat_list.find_elements(By.CSS_SELECTOR, '[role="row"]')
+                    except NoSuchElementException:
+                        session.add_message("error", {"message": "No chat rows found"})
+                        return {"success": False, "error": "No chat rows found"}
+                    
+                    if len(chat_rows) == 0:
+                        session.add_message("status", {"message": "Chat list is empty"})
+                        return {"success": False, "error": "No chats available"}
+                    
+                    # Find the first unread chat using Selenium
+                    for index, row in enumerate(chat_rows):
                         try:
-                            # Look for elements with aria-label ending in "unread message" or "unread messages"
-                            unread_elements = row.find_elements(By.CSS_SELECTOR, '[aria-label*="unread message"]')
-                            for elem in unread_elements:
-                                aria_label = elem.get_attribute('aria-label')
-                                if aria_label and ('unread message' in aria_label or 'unread messages' in aria_label):
-                                    unread_count_element = elem
-                                    break
-                        except NoSuchElementException:
-                            continue
-                        
-                        if not unread_count_element:
-                            continue
-                        
-                        # This chat is unread - extract details
-                        
-                        # 1. Get the Title (Contact Name/Number)
-                        title = "Title Not Found"
-                        try:
-                            title_element = row.find_element(By.CSS_SELECTOR, '[title]')
-                            title = title_element.get_attribute('title').strip()
-                        except NoSuchElementException:
-                            pass
-                        
-                        # 2. Get the Unread Count
-                        unread_count = 1
-                        try:
-                            aria_label = unread_count_element.get_attribute('aria-label')
-                            if aria_label:
-                                import re
-                                match = re.search(r'\d+', aria_label)
-                                if match:
-                                    unread_count = int(match.group(0))
-                        except:
-                            pass
-                        
-                        # 3. Get the Recent Message/Description
-                        description = "Description Not Found"
-                        try:
-                            message_span = row.find_element(By.CSS_SELECTOR, 'div[role="gridcell"]:nth-child(2) + div span[dir="ltr"]')
-                            description = message_span.text.strip()
-                        except NoSuchElementException:
-                            pass
-                        
-                        # 4. Get Chat ID from href
-                        chat_id = None
-                        try:
-                            link_element = row.find_element(By.CSS_SELECTOR, 'a[href*="web.whatsapp.com"]')
-                            href = link_element.get_attribute('href')
-                            
-                            # Extract chat ID
-                            import re
-                            match = re.search(r'[0-9]+@[cgs]\.us', href)
-                            if match:
-                                chat_id = match.group(0)
-                        except NoSuchElementException:
-                            pass
-                        
-                        # Fallback for chat ID
-                        if not chat_id:
+                            # Check for unread message counter
+                            unread_count_element = None
                             try:
-                                chat_id = row.get_attribute('data-id')
+                                # Look for elements with aria-label ending in "unread message" or "unread messages"
+                                unread_elements = row.find_elements(By.CSS_SELECTOR, '[aria-label*="unread message"]')
+                                for elem in unread_elements:
+                                    aria_label = elem.get_attribute('aria-label')
+                                    if aria_label and ('unread message' in aria_label or 'unread messages' in aria_label):
+                                        unread_count_element = elem
+                                        break
+                            except NoSuchElementException:
+                                continue
+                            
+                            if not unread_count_element:
+                                continue
+                            
+                            # This chat is unread - extract details
+                            
+                            # 1. Get the Title (Contact Name/Number)
+                            title = "Title Not Found"
+                            try:
+                                title_element = row.find_element(By.CSS_SELECTOR, '[title]')
+                                title = title_element.get_attribute('title').strip()
+                            except NoSuchElementException:
+                                pass
+                            
+                            # 2. Get the Unread Count
+                            unread_count = 1
+                            try:
+                                aria_label = unread_count_element.get_attribute('aria-label')
+                                if aria_label:
+                                    import re
+                                    match = re.search(r'\d+', aria_label)
+                                    if match:
+                                        unread_count = int(match.group(0))
                             except:
                                 pass
-                        
-                        if not chat_id:
-                            chat_id = f"chat_{index}"
-                        
-                        unread_chats.append({
-                            "id": chat_id,
-                            "ranking": index + 1,
-                            "title": title,
-                            "unreadCount": unread_count,
-                            "recentMessage": description,
-                            "row_element": row  # Store reference for clicking
-                        })
-                        
-                    except Exception as e:
-                        session.add_message("error", {
-                            "action": "parse_unread_chat",
-                            "index": index,
-                            "error": str(e)
-                        })
-                        continue
-                
-                if len(unread_chats) == 0:
-                    session.add_message("status", {
-                        "message": "No unread chats found",
-                        "unread_count": 0
-                    })
-                    return {
-                        "success": True,
-                        "message": "No unread chats found",
-                        "opened_chats": [],
-                        "total_count": 0,
-                        "total_unread": 0
-                    }
-                
-                session.add_message("status", {
-                    "message": f"Found {len(unread_chats)} unread chat(s)",
-                    "unread_count": len(unread_chats)
-                })
-                
-                opened_chats = []
-                
-                # Click each unread chat using Selenium
-                for idx, chat in enumerate(unread_chats):
-                    try:
-                        # Re-find the chat element to avoid stale element issues
-                        chat_list = session.driver.find_element(By.CSS_SELECTOR, '[aria-label="Chat list"]')
-                        chat_rows = chat_list.find_elements(By.CSS_SELECTOR, '[role="row"]')
-                        
-                        # Find the correct row by matching chat ID or ranking
-                        target_row = None
-                        for row in chat_rows:
+                            
+                            # 3. Get the Recent Message/Description
+                            description = "Description Not Found"
+                            try:
+                                message_span = row.find_element(By.CSS_SELECTOR, 'div[role="gridcell"]:nth-child(2) + div span[dir="ltr"]')
+                                description = message_span.text.strip()
+                            except NoSuchElementException:
+                                pass
+                            
+                            # 4. Get Chat ID from href
+                            chat_id = None
                             try:
                                 link_element = row.find_element(By.CSS_SELECTOR, 'a[href*="web.whatsapp.com"]')
                                 href = link_element.get_attribute('href')
+                                
+                                # Extract chat ID
                                 import re
                                 match = re.search(r'[0-9]+@[cgs]\.us', href)
-                                if match and match.group(0) == chat["id"]:
-                                    target_row = row
-                                    break
-                            except:
+                                if match:
+                                    chat_id = match.group(0)
+                            except NoSuchElementException:
+                                pass
+                            
+                            # Fallback for chat ID
+                            if not chat_id:
+                                try:
+                                    chat_id = row.get_attribute('data-id')
+                                except:
+                                    pass
+                            
+                            if not chat_id:
+                                chat_id = f"chat_{index}"
+                            
+                            # Click the chat using Selenium
+                            try:
+                                WebDriverWait(session.driver, 5).until(
+                                    EC.element_to_be_clickable(row)
+                                )
+                                row.click()
+                                
+                                # Log the opened chat with ID
+                                session.add_message("action", {
+                                    "action_type": "CHAT_OPENED",
+                                    "chat_id": chat_id,
+                                    "chat_title": title,
+                                    "unread_count": unread_count,
+                                    "message": f"Opened unread chat: {title} (ID: {chat_id}) - {unread_count} unread message(s)"
+                                })
+                                
+                                # Wait before returning
+                                await asyncio.sleep(click_delay)
+                                
+                                return {
+                                    "success": True,
+                                    "opened_chat": {
+                                        "id": chat_id
+                                    }
+                                }
+                                
+                            except Exception as e:
+                                session.add_message("error", {
+                                    "action": "click_unread_chat",
+                                    "chat_id": chat_id,
+                                    "chat_title": title,
+                                    "error": str(e)
+                                })
                                 continue
-                        
-                        if not target_row:
-                            # Fallback: use the stored element if still valid
-                            target_row = chat["row_element"]
-                        
-                        # Wait for element to be clickable
-                        WebDriverWait(session.driver, 5).until(
-                            EC.element_to_be_clickable(target_row)
-                        )
-                        
-                        # Click the chat using Selenium
-                        target_row.click()
-                        
-                        # Log the opened chat with ID
-                        session.add_message("action", {
-                            "action_type": "CHAT_OPENED",
-                            "chat_id": chat["id"],
-                            "chat_title": chat["title"],
-                            "unread_count": chat["unreadCount"],
-                            "message": f"Opened unread chat: {chat['title']} (ID: {chat['id']}) - {chat['unreadCount']} unread message(s)"
-                        })
-                        
-                        opened_chats.append({
-                            "id": chat["id"],
-                            "title": chat["title"],
-                            "unread_count": chat["unreadCount"],
-                            "recent_message": chat["recentMessage"]
-                        })
-                        
-                        # Wait before clicking next chat
-                        if idx < len(unread_chats) - 1:
-                            await asyncio.sleep(click_delay)
-                        
-                    except Exception as e:
-                        session.add_message("error", {
-                            "action": "open_unread_chat",
-                            "chat_id": chat.get("id", "unknown"),
-                            "chat_title": chat.get("title", "unknown"),
-                            "error": str(e)
-                        })
-                        continue
-                
-                session.add_message("status", {
-                    "message": f"Successfully opened {len(opened_chats)} out of {len(unread_chats)} unread chat(s)",
-                    "opened_count": len(opened_chats),
-                    "total_unread": len(unread_chats)
-                })
-                
-                return {
-                    "success": True,
-                    "opened_chats": opened_chats,
-                    "total_count": len(opened_chats),
-                    "total_unread": len(unread_chats)
-                }
-                
-            except Exception as e:
-                session.add_message("error", {
-                    "action": "open_unread_chats",
-                    "error": str(e)
-                })
-                return {"success": False, "error": str(e)}
-
+                            
+                        except Exception as e:
+                            session.add_message("error", {
+                                "action": "parse_unread_chat",
+                                "index": index,
+                                "error": str(e)
+                            })
+                            continue
+                    
+                    # No unread chats found
+                    session.add_message("status", {
+                        "message": "No unread chats found"
+                    })
+                    return {"success": False, "error": "No unread chats found"}
+                    
+                except Exception as e:
+                    return {"success": False, "error": str(e)}
 
 
 
@@ -1107,11 +1045,7 @@ class AutomationActions:
                             grouped_chat_history.append(group_messages)
                             
                     except Exception as e:
-                        session.add_message("error", {
-                            "action": "parse_group",
-                            "group_index": group_index,
-                            "error": str(e)
-                        })
+
                         continue
                 
                 session.add_message("log", {

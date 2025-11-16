@@ -4,6 +4,7 @@ from typing import Dict, Optional, List , Tuple
 from session import AutomationSession
 from models import SessionStatus, AgentType
 import shutil
+from utils.global_utils import get_base_path   # <--- imported
 
 import base64
 import re
@@ -12,7 +13,7 @@ import re
 class SessionManager:
     """Manages multiple WhatsApp automation sessions with file-safe session IDs."""
 
-    SEPARATOR = "||"
+    SEPARATOR = "__"
 
     def __init__(self):
         self.sessions: Dict[str, "AutomationSession"] = {}
@@ -134,42 +135,46 @@ class SessionManager:
         return [s.get_info() for s in self.sessions.values()]
     
     def list_saved_profiles(self) -> List[dict]:
-        """List saved profiles on disk"""
-        base_path = "/home/suraj/chrome_selenium"
+        """List saved browser profiles stored on disk"""
         
+        base_path = get_base_path()  # <-- FIXED (cross-platform)
+
         if not os.path.exists(base_path):
             return []
-        
+
         profiles = []
         for item in os.listdir(base_path):
             path = os.path.join(base_path, item)
+
             if item.startswith("session_") and os.path.isdir(path):
-                # Extract encoded session_id from directory name
                 encoded_id = item.replace("session_", "", 1)
+
+                # decode_session_id() must return (uuid, profile_name)
                 base_uuid, profile_name = self.decode_session_id(encoded_id)
-                    
-                is_active = encoded_id in self.sessions
+
                 profiles.append({
                     "encoded_session_id": encoded_id,
                     "base_uuid": base_uuid,
                     "profile_name": profile_name or "Unknown",
-                    "is_active": is_active
+                    "is_active": encoded_id in getattr(self, "sessions", {})
                 })
-        
+
         return profiles
+
+
     def delete_session(self, session_id: str) -> bool:
-        """Delete session folder on disk"""
-        base_path = "/home/suraj/chrome_selenium"
+        """Delete a session folder from disk"""
+
+        base_path = get_base_path()  # <-- FIXED (cross-platform)
         session_folder = os.path.join(base_path, f"session_{session_id}")
 
-        if os.path.exists(session_folder) and os.path.isdir(session_folder):
+        if os.path.isdir(session_folder):
             try:
                 shutil.rmtree(session_folder)
                 return True
             except Exception as e:
                 print(f"Failed to delete session folder: {e}")
                 return False
-
+        
         return False
-
 session_manager = SessionManager()

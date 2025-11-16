@@ -237,6 +237,31 @@ async def get_qr_code(session_id: str):
     result = await AutomationActions.get_qr_code_if_logout(session)
     return result
 
+# GET /sessions/{id}/whatsapp/status?state={qr_visible|loading_chats|logged_in}
+# Example: {"success": true, "state": "qr_visible"}
+@router.get("/sessions/{session_id}/whatsapp/status")
+async def get_whatsapp_status(
+    session_id: str,
+    state: str = Query(..., description="Target state to check: qr_visible | loading_chats | logged_in")
+):
+    """Instantly check WhatsApp live status based on target state."""
+    
+    allowed_states = {"qr_visible", "loading_chats", "logged_in"}
+    if state not in allowed_states:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid state value. Allowed: {', '.join(allowed_states)}"
+        )
+
+    session = session_manager.get_session(session_id)
+    if not session or not session.driver:
+        raise HTTPException(status_code=400, detail="Session or driver not ready")
+
+    result = await AutomationActions.get_whatsapp_live_state(session, state)
+    return result
+
+
+
 @router.post("/sessions/{session_id}/agents/{agent_type}/enable")
 async def enable_agent(
     session_id: str,

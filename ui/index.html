@@ -1054,31 +1054,68 @@ async function deleteProfile(id) {
                     session.isQrReady = true;
                     renderDashboard();
                 }
+
+
+
+
             }
 
             /**
              * Toggles the visibility of the full QR code display card.
              */
-            function showQrView(id) {
-                console.log(`Action: Toggling ON QR Code View for session ID: ${id}`);
-                qrCodeVisibleState[id] = true;
-                delete expandedDetailsState[id]; // Ensure details are hidden
-                renderDashboard();
-            }
+// Poll trackers so multiple sessions don’t collide
+const statusPollIntervals = {};
 
-            /**
-             * Hides the QR code interface, returns to the default info compact card,
-             * and clears the QR ready flag so the pulsing button disappears.
-             */
-            function hideQrCode(id) {
-                console.log(`Action: Hiding QR code and clearing readiness for session ID: ${id}`);
-                const session = liveSessions.find(s => s.id === id);
-                if (session) {
-                    session.isQrReady = false; // Hide the pulsing button
-                }
-                delete qrCodeVisibleState[id];
-                renderDashboard();
-            }
+function showQrView(id) {
+    console.log(`Action: Toggling ON QR Code View for session ID: ${id}`);
+    
+    qrCodeVisibleState[id] = true;
+    delete expandedDetailsState[id]; 
+    renderDashboard();
+
+    // Start polling status every 2 seconds
+    startStatusPolling(id);
+}
+
+function startStatusPolling(id) {
+    if (statusPollIntervals[id]) return;
+
+    statusPollIntervals[id] = setInterval(async () => {
+        try {
+            const url = `/sessions/${id}/whatsapp/status?state=logged_in`;
+            console.log("Requesting:", url);
+
+            const res = await fetch(url);
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+            const data = await res.json();
+            console.log("Status:", data);
+
+            if (data.success === true) hideQrCode(id);
+
+        } catch (err) {
+            console.error("Status polling error:", err);
+        }
+    }, 2000);
+}
+
+function hideQrCode(id) {
+    console.log(`Action: Hiding QR code and clearing readiness for session ID: ${id}`);
+
+    const session = liveSessions.find(s => s.id === id);
+    if (session) {
+        session.isQrReady = false;
+    }
+
+    delete qrCodeVisibleState[id];
+    renderDashboard();
+
+    // stop status polling
+    if (statusPollIntervals[id]) {
+        clearInterval(statusPollIntervals[id]);
+        delete statusPollIntervals[id];
+    }
+}
 
             /**
              * Updates the uptime display for all live sessions without re-rendering the whole grid.

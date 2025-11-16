@@ -43,11 +43,7 @@ class AutomationActions:
 
                 print(f"✅ Browser initialized — Title: {result['title']}\n")
 
-                session.add_message("action", {
-                                "action_type": "SHOW_QR",
-                                "message": "QR code ready — ask user to scan",
-                                
-                            })
+
 
                 async def background_check():
                     await AutomationActions.check_login_state(session)
@@ -85,15 +81,72 @@ class AutomationActions:
 
                 # Send minimal log + action messages
                 session.add_message("log", {"message": "QR code extracted"})
-                
-                async def background_check():
-                    await AutomationActions.wait_for_loading_chats_and_hide_qr(session)
-                asyncio.create_task(background_check())
+
 
                 return {"success": True, "qr_code": base64_data, "state": "logged_out"}
 
             except Exception as e:
                 session.add_message("log", {"message": f"Failed to get QR code: {e}"})
+                return {"success": False, "error": str(e)}
+
+
+
+
+        @staticmethod
+        async def get_whatsapp_live_state(session: "AutomationSession", target_state: str):
+            """
+            Instantly checks only the requested WhatsApp Web state without waiting.
+
+            target_state options:
+                - "qr_visible"
+                - "loading_chats"
+                - "logged_in"
+            """
+            try:
+                driver = session.driver
+                if not driver:
+                    return {"success": False, "error": "Driver not initialized"}
+
+                # Switch-like state checks
+                match target_state:
+
+                    case "qr_visible":
+                        try:
+                            driver.find_element(By.TAG_NAME, "canvas")
+                            return {"success": True, "state": "qr_visible"}
+                        except NoSuchElementException:
+                            return {"success": False, "state": "not_found"}
+
+                    case "loading_chats":
+                        try:
+                            driver.find_element(
+                                By.XPATH,
+                                "//div[contains(@class, 'x1c3i2sq') and text()='Loading your chats']"
+                            )
+                            return {"success": True, "state": "loading_chats"}
+                        except NoSuchElementException:
+                            return {"success": False, "state": "not_found"}
+
+                    case "logged_in":
+                        # logged in means: no QR + no loading screen
+                        try:
+                            driver.find_element(By.TAG_NAME, "canvas")  # QR visible = not logged in
+                            return {"success": False, "state": "qr_visible"}
+                        except NoSuchElementException:
+                            try:
+                                driver.find_element(
+                                    By.XPATH,
+                                    "//div[contains(@class, 'x1c3i2sq') and text()='Loading your chats']"
+                                )
+                                return {"success": False, "state": "loading_chats"}
+                            except NoSuchElementException:
+                                return {"success": True, "state": "logged_in"}
+
+                    case _:
+                        return {"success": False, "error": f"Unknown target_state '{target_state}'"}
+
+            except Exception as e:
+                session.add_message("error", {"action": "check_live_state", "error": str(e)})
                 return {"success": False, "error": str(e)}
 
         @staticmethod
@@ -145,57 +198,6 @@ class AutomationActions:
             except Exception as e:
                 session.add_message("log", {"message": f"Login state check failed: {e}"})
                 return {"success": False, "error": str(e)}
-
-
-        @staticmethod
-        async def wait_for_loading_chats_and_hide_qr(session: "AutomationSession"):
-            """
-            Waits specifically for the 'Loading your chats' div to appear (indicating login success)
-            and monitors the QR <canvas> element to detect when it is removed (QR scanned).
-            """
-            try:
-                driver = session.driver
-                if not driver:
-                    return {"success": False, "error": "Driver not initialized"}
-
-                # Wait up to 60 seconds for the 'Loading your chats' div to appear
-                WebDriverWait(driver, 60).until(
-                    EC.presence_of_element_located((By.XPATH, "//div[contains(@class, 'x1c3i2sq') and text()='Loading your chats']"))
-                )
-
-                # Loading element found — send HIDE_QR signal
-                session.add_message("action", {
-                    "action_type": "HIDE_QR",
-                    "message": "QR code scanned "
-                })
-                session.add_message("status", {"message": "User login confirmed"})
-
-                # Optionally, monitor the <canvas> element to know when QR is scanned
-                try:
-                    # Note: This find_element might fail immediately if the QR is already gone
-                    canvas_elem = driver.find_element(By.TAG_NAME, "canvas")
-                    WebDriverWait(driver, 60).until(
-                        EC.staleness_of(canvas_elem)  # Wait until canvas is removed from DOM
-                    )
-                    # Canvas removed — QR likely scanned
-                    session.add_message("action", {
-                        "action_type": "HIDE_QR",
-                        "message": "QR code has been scanned"
-                    })
-                except NoSuchElementException:
-                    # Canvas not found — maybe already gone when we checked
-                    session.add_message("log", {"message": "QR canvas element not found — may have already been scanned."})
-                except TimeoutException:
-                    session.add_message("log", {"message": "Timeout waiting for QR canvas to disappear."})
-
-                return {"success": True, "state": "login_confirmed"}
-
-            except TimeoutException:
-                session.add_message("log", {"message": "Timeout waiting for 'Loading your chats' element (login may have failed or taken too long)."})
-                return {"success": False, "error": "Timeout waiting for login confirmation element."}
-            except Exception as e:
-                session.add_message("error", {"action": "wait_login_element", "error": str(e)})
-                return {"success": False, "error": f"Error waiting for loading chats element: {e}"}
 
 
 

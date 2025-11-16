@@ -127,44 +127,7 @@ class AutoReplyAgent(BaseAgent):
         super().__init__(AgentType.AUTOREPLY, config)
         self.session = session
         self.model = None
-        self._initialize_gemini()
-    
-    def _initialize_gemini(self):
-        """Initialize Gemini API with configuration"""
-        try:
-            api_key = self.config.get("gemini_api_key")
-            model_name = self.config.get("model", "gemini-1.5-flash")
-            
-            self.session.add_message("log", {
-                "agent": "autoreply",
-                "action": "initialize_gemini",
-                "message": f"Initializing Gemini with model: {model_name}"
-            })
-            
-            if not api_key:
-                self.session.add_message("error", {
-                    "agent": "autoreply",
-                    "action": "initialize_gemini",
-                    "error": "gemini_api_key is required in config"
-                })
-                raise ValueError("gemini_api_key is required in config")
-            
-            genai.configure(api_key=api_key)
-            self.model = genai.GenerativeModel(model_name)
-            
-            self.session.add_message("status", {
-                "agent": "autoreply",
-                "action": "initialize_gemini",
-                "message": "Gemini API initialized successfully"
-            })
-            
-        except Exception as e:
-            self.session.add_message("error", {
-                "agent": "autoreply",
-                "action": "initialize_gemini",
-                "error": str(e)
-            })
-            raise
+
     async def _generate_reply(self, chat_history: str) -> str:
 
         self.session.add_message("log", {"message": "Starting _generate_reply method"})
@@ -178,7 +141,9 @@ class AutoReplyAgent(BaseAgent):
                 "action": "initialize_gemini",
                 "error": "gemini_api_key is required in config"
             })
-            raise ValueError("gemini_api_key is required in config")
+            # raise ValueError("gemini_api_key is required in config")
+            return "Thanks for your message! I'll get back to you soon as right now i am dumb."
+
 
         # System instruction
         system_inst = self.config.get("system_instruction")
@@ -237,11 +202,7 @@ class AutoReplyAgent(BaseAgent):
 
                     if not result.get("success"):
                         # ❌ Driver or list error
-                        self.session.add_message("error", {
-                            "agent": "autoreply",
-                            "action": "open_unread_chat",
-                            "error": result.get("error")
-                        })
+
                         await asyncio.sleep(check_interval)
                         continue
 
@@ -267,7 +228,7 @@ class AutoReplyAgent(BaseAgent):
 
 
                     chat_info = opened_chat
-                    if chat_info:
+                    if chat_info:   
 
 
                         if self.status != AgentStatus.ENABLED:
@@ -277,9 +238,12 @@ class AutoReplyAgent(BaseAgent):
                             # Process only one chat
                             number = chat_info.get("id")
 
-                            
+                                
 
-
+                            self.session.add_message("action", {
+                                "action": "CHAT_OPENED",
+                                "chat_id": number
+                            })
                             # Wait a bit before replying (respect delay)
                             for _ in range(int(reply_delay * 10)):  # check every 0.1s
                                 if self.status != AgentStatus.ENABLED:

@@ -433,171 +433,171 @@
          * Includes validation checks using localStorage for agent configuration data.
          * @param {('outreach'|'autoreply')} agentType - The type of agent to toggle.
          */
-async function toggleAgentStatus(agentType) {
-    console.log("=== toggleAgentStatus CALLED ===", { agentType });
+        async function toggleAgentStatus(agentType) {
+            console.log("=== toggleAgentStatus CALLED ===", { agentType });
 
-    const agent = agentStatus[agentType];
-    console.log("Current agent state:", agent);
+            const agent = agentStatus[agentType];
+            console.log("Current agent state:", agent);
 
-    const button = agentType === 'outreach' ? outreachToggleBtn : autoreplyToggleBtn;
-    const icon = button.querySelector('i');
+            const button = agentType === 'outreach' ? outreachToggleBtn : autoreplyToggleBtn;
+            const icon = button.querySelector('i');
 
-    let bodyData = {};
+            let bodyData = {};
 
-    // =====================================================================
-    // STARTING AGENT
-    // =====================================================================
-    if (!agent.isRunning) {
-        console.log("[START] Agent is currently NOT running → Attempting to START");
+            // =====================================================================
+            // STARTING AGENT
+            // =====================================================================
+            if (!agent.isRunning) {
+                console.log("[START] Agent is currently NOT running → Attempting to START");
 
-        if (agentType === "autoreply") {
-            const airesponse = localStorage.getItem("airesponse");
-            console.log("Retrieved airesponse from localStorage:", airesponse);
+                if (agentType === "autoreply") {
+                    const airesponse = localStorage.getItem("airesponse");
+                    console.log("Retrieved airesponse from localStorage:", airesponse);
 
-            if (!airesponse) {
-                alert("Required settings are missing. Please check your configuration.");
-                addLiveStatus(currentSession.id, `<span class="text-red-400">ERROR: Autoreply instructions not found.</span>`);
-                return;
+                    if (!airesponse) {
+                        alert("Required settings are missing. Please check your configuration.");
+                        addLiveStatus(currentSession.id, `<span class="text-red-400">ERROR: Autoreply instructions not found.</span>`);
+                        return;
+                    }
+
+                    bodyData.ai_instruction = airesponse;
+
+                } else if (agentType === "outreach") {
+                    agentType = "auto_outreach"
+                    const list_of_contact = JSON.parse(localStorage.getItem("list_of_contact") || "[]");
+                    const messageTemplate = localStorage.getItem("messageTemplate");
+
+                    console.log("Retrieved outreach contact list:", list_of_contact);
+                    console.log("Retrieved message template:", messageTemplate);
+
+                    if (!list_of_contact.length || !messageTemplate) {
+                        alert("Required settings are missing. Please check your configuration.");
+                        addLiveStatus(currentSession.id, `<span class="text-red-400">ERROR: Contact list or message template missing.</span>`);
+                        return;
+                    }
+
+                    bodyData.list_of_contact = list_of_contact;
+                    bodyData.messageTemplate = messageTemplate;
+                }
+
+                // -----------------------------
+                // REAL API CALL - ENABLE AGENT
+                // -----------------------------
+                try {
+                    const apiUrl = `/api/sessions/${encodeURIComponent(currentSession.id)}/agents/${agentType}/enable`;
+                    console.log("[ENABLE] API URL:", apiUrl);
+                    console.log("[ENABLE] Sending body:", bodyData);
+
+                    addLiveStatus(currentSession.id, `<span class="text-gray-400">POST ${apiUrl} — enabling...</span>`);
+
+                    const res = await fetch(apiUrl, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify(bodyData)
+                    });
+
+                    console.log("[ENABLE] Raw Response Object:", res);
+
+                    if (!res.ok) {
+                        const text = await res.text();
+                        console.error("[ENABLE] HTTP Error:", res.status, text);
+                        throw new Error(`HTTP ${res.status}: ${text}`);
+                    }
+
+                    const data = await res.json();
+                    console.log("[ENABLE] Parsed JSON Response:", data);
+
+                    if (!data.success) {
+                        console.error("[ENABLE] Backend responded with error:", data.message);
+                        addLiveStatus(currentSession.id, `<span class="text-red-400">ERROR ENABLE: ${data.message}</span>`);
+                        return;
+                    }
+
+                    console.log("[ENABLE] SUCCESS:", data.message);
+                    addLiveStatus(currentSession.id, `<span class="text-green-400">${data.message}</span>`);
+
+                } catch (err) {
+                    console.error("[ENABLE] CATCH ERROR:", err);
+                    addLiveStatus(currentSession.id, `<span class="text-red-400">API ERROR (enable): ${err.message}</span>`);
+                    return;
+                }
             }
 
-            bodyData.ai_instruction = airesponse;
+            // =====================================================================
+            // PAUSING AGENT
+            // =====================================================================
+            if (agent.isRunning) {
+                console.log("[PAUSE] Agent IS running → Attempting to PAUSE");
 
-        } else if (agentType === "outreach") {
-            agentType === "auto_outreach"
-            const list_of_contact = JSON.parse(localStorage.getItem("list_of_contact") || "[]");
-            const messageTemplate = localStorage.getItem("messageTemplate");
+                try {
+                    const apiUrl = `/api/sessions/${encodeURIComponent(currentSession.id)}/agents/${agentType}/pause`;
+                    console.log("[PAUSE] API URL:", apiUrl);
 
-            console.log("Retrieved outreach contact list:", list_of_contact);
-            console.log("Retrieved message template:", messageTemplate);
+                    addLiveStatus(currentSession.id, `<span class="text-gray-400">POST ${apiUrl} — pausing...</span>`);
 
-            if (!list_of_contact.length || !messageTemplate) {
-                alert("Required settings are missing. Please check your configuration.");
-                addLiveStatus(currentSession.id, `<span class="text-red-400">ERROR: Contact list or message template missing.</span>`);
-                return;
+                    const res = await fetch(apiUrl, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" }
+                    });
+
+                    console.log("[PAUSE] Raw Response Object:", res);
+
+                    if (!res.ok) {
+                        const text = await res.text();
+                        console.error("[PAUSE] HTTP Error:", res.status, text);
+                        throw new Error(`HTTP ${res.status}: ${text}`);
+                    }
+
+                    const data = await res.json();
+                    console.log("[PAUSE] Parsed JSON Response:", data);
+
+                    if (!data.success) {
+                        console.error("[PAUSE] Backend responded with error:", data.message);
+                        addLiveStatus(currentSession.id, `<span class="text-red-400">ERROR PAUSE: ${data.message}</span>`);
+                        return;
+                    }
+
+                    console.log("[PAUSE] SUCCESS:", data.message);
+                    addLiveStatus(currentSession.id, `<span class="text-yellow-400">${data.message}</span>`);
+
+                } catch (err) {
+                    console.error("[PAUSE] CATCH ERROR:", err);
+                    addLiveStatus(currentSession.id, `<span class="text-red-400">API ERROR (pause): ${err.message}</span>`);
+                    return;
+                }
             }
 
-            bodyData.list_of_contact = list_of_contact;
-            bodyData.messageTemplate = messageTemplate;
-        }
-
-        // -----------------------------
-        // REAL API CALL - ENABLE AGENT
-        // -----------------------------
-        try {
-            const apiUrl = `/api/sessions/${encodeURIComponent(currentSession.id)}/agents/${agentType}/enable`;
-            console.log("[ENABLE] API URL:", apiUrl);
-            console.log("[ENABLE] Sending body:", bodyData);
-
-            addLiveStatus(currentSession.id, `<span class="text-gray-400">POST ${apiUrl} — enabling...</span>`);
-
-            const res = await fetch(apiUrl, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(bodyData)
+            // =====================================================================
+            // UI UPDATE
+            // =====================================================================
+            console.log("Updating UI — agent status flipping:", {
+                oldState: agent.isRunning,
+                newState: !agent.isRunning
             });
 
-            console.log("[ENABLE] Raw Response Object:", res);
+            agent.isRunning = !agent.isRunning;
 
-            if (!res.ok) {
-                const text = await res.text();
-                console.error("[ENABLE] HTTP Error:", res.status, text);
-                throw new Error(`HTTP ${res.status}: ${text}`);
+            if (agent.isRunning) {
+                console.log("UI: Agent is now RUNNING");
+                icon.className = 'fas fa-pause text-base';
+                button.title = `Pause ${agent.name}`;
+                button.classList.replace('text-green-600', 'text-blue-500');
+                button.classList.replace('hover:text-green-700', 'hover:text-blue-600');
+
+                addLiveStatus(currentSession.id, `<span class="text-green-400">AGENT RUNNING: ${agent.name}</span>`);
+
+            } else {
+                console.log("UI: Agent is now PAUSED");
+                icon.className = 'fas fa-play text-base';
+                button.title = `Start ${agent.name}`;
+                button.classList.replace('text-blue-500', 'text-green-600');
+                button.classList.replace('hover:text-blue-600', 'hover:text-green-700');
+
+                addLiveStatus(currentSession.id, `<span class="text-yellow-400">AGENT PAUSED: ${agent.name}</span>`);
             }
 
-            const data = await res.json();
-            console.log("[ENABLE] Parsed JSON Response:", data);
-
-            if (!data.success) {
-                console.error("[ENABLE] Backend responded with error:", data.message);
-                addLiveStatus(currentSession.id, `<span class="text-red-400">ERROR ENABLE: ${data.message}</span>`);
-                return;
-            }
-
-            console.log("[ENABLE] SUCCESS:", data.message);
-            addLiveStatus(currentSession.id, `<span class="text-green-400">${data.message}</span>`);
-
-        } catch (err) {
-            console.error("[ENABLE] CATCH ERROR:", err);
-            addLiveStatus(currentSession.id, `<span class="text-red-400">API ERROR (enable): ${err.message}</span>`);
-            return;
+            console.log("=== toggleAgentStatus COMPLETED ===");
         }
-    }
-
-    // =====================================================================
-    // PAUSING AGENT
-    // =====================================================================
-    if (agent.isRunning) {
-        console.log("[PAUSE] Agent IS running → Attempting to PAUSE");
-
-        try {
-            const apiUrl = `/api/sessions/${encodeURIComponent(currentSession.id)}/agents/${agentType}/pause`;
-            console.log("[PAUSE] API URL:", apiUrl);
-
-            addLiveStatus(currentSession.id, `<span class="text-gray-400">POST ${apiUrl} — pausing...</span>`);
-
-            const res = await fetch(apiUrl, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" }
-            });
-
-            console.log("[PAUSE] Raw Response Object:", res);
-
-            if (!res.ok) {
-                const text = await res.text();
-                console.error("[PAUSE] HTTP Error:", res.status, text);
-                throw new Error(`HTTP ${res.status}: ${text}`);
-            }
-
-            const data = await res.json();
-            console.log("[PAUSE] Parsed JSON Response:", data);
-
-            if (!data.success) {
-                console.error("[PAUSE] Backend responded with error:", data.message);
-                addLiveStatus(currentSession.id, `<span class="text-red-400">ERROR PAUSE: ${data.message}</span>`);
-                return;
-            }
-
-            console.log("[PAUSE] SUCCESS:", data.message);
-            addLiveStatus(currentSession.id, `<span class="text-yellow-400">${data.message}</span>`);
-
-        } catch (err) {
-            console.error("[PAUSE] CATCH ERROR:", err);
-            addLiveStatus(currentSession.id, `<span class="text-red-400">API ERROR (pause): ${err.message}</span>`);
-            return;
-        }
-    }
-
-    // =====================================================================
-    // UI UPDATE
-    // =====================================================================
-    console.log("Updating UI — agent status flipping:", {
-        oldState: agent.isRunning,
-        newState: !agent.isRunning
-    });
-
-    agent.isRunning = !agent.isRunning;
-
-    if (agent.isRunning) {
-        console.log("UI: Agent is now RUNNING");
-        icon.className = 'fas fa-pause text-base';
-        button.title = `Pause ${agent.name}`;
-        button.classList.replace('text-green-600', 'text-blue-500');
-        button.classList.replace('hover:text-green-700', 'hover:text-blue-600');
-
-        addLiveStatus(currentSession.id, `<span class="text-green-400">AGENT RUNNING: ${agent.name}</span>`);
-
-    } else {
-        console.log("UI: Agent is now PAUSED");
-        icon.className = 'fas fa-play text-base';
-        button.title = `Start ${agent.name}`;
-        button.classList.replace('text-blue-500', 'text-green-600');
-        button.classList.replace('hover:text-blue-600', 'hover:text-green-700');
-
-        addLiveStatus(currentSession.id, `<span class="text-yellow-400">AGENT PAUSED: ${agent.name}</span>`);
-    }
-
-    console.log("=== toggleAgentStatus COMPLETED ===");
-}
 
 
 
@@ -605,22 +605,91 @@ async function toggleAgentStatus(agentType) {
          * Stops the agent completely (resets it to the initial paused state) by calling the disable endpoint.
          * @param {('outreach'|'autoreply')} agentType - The type of agent to stop.
          */
-     async function stopAgent(agentType) {
-    const agent = agentStatus[agentType];
+        async function stopAgent(agentType) {
+            const agent = agentStatus[agentType];
 
-    // =============
-    // REAL API CALL
-    // =============
+            // =============
+            // REAL API CALL
+            // =============
+            try {
+                const apiUrl = `/api/sessions/${encodeURIComponent(currentSession.id)}/agents/${agentType}/disable`;
+
+                addLiveStatus(
+                    currentSession.id,
+                    `<span class="text-gray-400">POST ${apiUrl} — disabling agent...</span>`
+                );
+
+                const res = await fetch(apiUrl, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" }
+                });
+
+                if (!res.ok) {
+                    const text = await res.text();
+                    throw new Error(`HTTP ${res.status}: ${text}`);
+                }
+
+                const data = await res.json();
+
+                if (!data.success) {
+                    addLiveStatus(
+                        currentSession.id,
+                        `<span class="text-red-400">ERROR DISABLE: ${data.message}</span>`
+                    );
+                    return;
+                }
+
+                addLiveStatus(
+                    currentSession.id,
+                    `<span class="text-red-400">${data.message}</span>`
+                );
+
+            } catch (err) {
+                addLiveStatus(
+                    currentSession.id,
+                    `<span class="text-red-400">API ERROR (disable): ${err.message}</span>`
+                );
+                return;
+            }
+
+            // =============
+            // UPDATE UI
+            // =============
+            if (agent.isRunning) {
+                agent.isRunning = false;
+
+                const button = agentType === 'outreach' ? outreachToggleBtn : autoreplyToggleBtn;
+                const icon = button.querySelector('i');
+
+                // Reset to play button
+                icon.className = 'fas fa-play text-base';
+                button.title = `Start ${agent.name}`;
+
+                // Colors back to idle state
+                button.classList.replace('text-blue-500', 'text-green-600');
+                button.classList.replace('hover:text-blue-600', 'hover:text-green-700');
+            }
+
+            console.log(`${agent.name} STOPPED and DISABLED.`);
+
+            addLiveStatus(
+                currentSession.id,
+                `<span class="text-red-400">AGENT: ${agent.name} is now fully disabled.</span>`
+            );
+        }
+
+/**
+ * Fetches the current status of agents from the backend and updates the UI.
+ */
+async function loadAgentStatus() {
+    if (!currentSession || !currentSession.id) return;
+
     try {
-        const apiUrl = `/api/sessions/${encodeURIComponent(currentSession.id)}/agents/${agentType}/disable`;
-
-        addLiveStatus(
-            currentSession.id,
-            `<span class="text-gray-400">POST ${apiUrl} — disabling agent...</span>`
-        );
+        const apiUrl = `/api/sessions/${encodeURIComponent(currentSession.id)}/agents/status`;
+        console.log("[LOAD STATUS] Fetching agent status from:", apiUrl);
 
         const res = await fetch(apiUrl, {
-            method: "POST",
+            method: "GET",
             headers: { "Content-Type": "application/json" }
         });
 
@@ -630,54 +699,38 @@ async function toggleAgentStatus(agentType) {
         }
 
         const data = await res.json();
+        console.log("[LOAD STATUS] Response data:", data);
 
-        if (!data.success) {
-            addLiveStatus(
-                currentSession.id,
-                `<span class="text-red-400">ERROR DISABLE: ${data.message}</span>`
-            );
-            return;
+        if (!data.success || !data.agents) return;
+
+        // Update each agent status based on response
+        for (const [agentType, status] of Object.entries(data.agents)) {
+            const agent = agentStatus[agentType === 'auto_outreach' ? 'outreach' : agentType];
+            const button = agentType === 'auto_outreach' ? outreachToggleBtn : autoreplyToggleBtn;
+            const icon = button.querySelector('i');
+
+            if (status === "enabled") {
+                agent.isRunning = true;
+                icon.className = 'fas fa-pause text-base';
+                button.title = `Pause ${agent.name}`;
+                button.classList.replace('text-green-600', 'text-blue-500');
+                button.classList.replace('hover:text-green-700', 'hover:text-blue-600');
+            } else {
+                agent.isRunning = false;
+                icon.className = 'fas fa-play text-base';
+                button.title = `Start ${agent.name}`;
+                button.classList.replace('text-blue-500', 'text-green-600');
+                button.classList.replace('hover:text-blue-600', 'hover:text-green-700');
+            }
+
+            addLiveStatus(currentSession.id, `<span class="text-gray-400">Loaded agent status: ${agent.name} → ${status}</span>`);
         }
 
-        addLiveStatus(
-            currentSession.id,
-            `<span class="text-red-400">${data.message}</span>`
-        );
-
     } catch (err) {
-        addLiveStatus(
-            currentSession.id,
-            `<span class="text-red-400">API ERROR (disable): ${err.message}</span>`
-        );
-        return;
+        console.error("[LOAD STATUS] Error fetching agent status:", err);
+        addLiveStatus(currentSession.id, `<span class="text-red-400">Error loading agent status: ${err.message}</span>`);
     }
-
-    // =============
-    // UPDATE UI
-    // =============
-    if (agent.isRunning) {
-        agent.isRunning = false;
-
-        const button = agentType === 'outreach' ? outreachToggleBtn : autoreplyToggleBtn;
-        const icon = button.querySelector('i');
-
-        // Reset to play button
-        icon.className = 'fas fa-play text-base';
-        button.title = `Start ${agent.name}`;
-
-        // Colors back to idle state
-        button.classList.replace('text-blue-500', 'text-green-600');
-        button.classList.replace('hover:text-blue-600', 'hover:text-green-700');
-    }
-
-    console.log(`${agent.name} STOPPED and DISABLED.`);
-
-    addLiveStatus(
-        currentSession.id,
-        `<span class="text-red-400">AGENT: ${agent.name} is now fully disabled.</span>`
-    );
 }
-
 
         /**
          * Ensures all agent buttons are correctly set to their initial PAUSED state.
@@ -710,7 +763,8 @@ async function toggleAgentStatus(agentType) {
             // If no ID → redirect
             if (!sessionId || sessionId.trim() === "" || sessionId === "null") {
                 console.warn("No session ID in URL.");
-                console.log("404 redirect");
+                window.location.href = "/ui/index.html";
+
                 return null;
             }
 
@@ -730,7 +784,8 @@ async function toggleAgentStatus(agentType) {
 
                 if (!res.ok) {
                     console.warn(`Failed verification. Status: ${res.status}`);
-                    console.log("404 redirect");
+                    window.location.href = "/ui/index.html";
+
                     return null;
                 }
 
@@ -740,6 +795,9 @@ async function toggleAgentStatus(agentType) {
                 // Optional: validate success flag
                 if (!data.success) {
                     console.log("Invalid session → redirect");
+                                    window.location.href = "/ui/index.html";
+                window.location.href = "/ui/index.html";
+
                     return null;
                 }
 
@@ -747,47 +805,81 @@ async function toggleAgentStatus(agentType) {
 
             } catch (err) {
                 console.error("Error verifying session:", err);
-                console.log("404 redirect");
+                window.location.href = "/ui/index.html";
+
                 return null;
             }
         }
 
         // --- Chat History Mocking (Unchanged) ---
 
-        async function mockFetchChatHistory(chatId) {
-            console.log(`MOCK API CALL: Fetching history for chat ID: ${chatId}`);
-            await new Promise(resolve => setTimeout(resolve, 300)); // Simulate API delay
+        async function fetchChatHistory(chatId) {
+            try {
+                console.log(`Fetching chat history for chat ID: ${chatId}`);
 
-            // Define mock history based on chat ID
-            let history;
-            if (chatId === 'chat_0') {
-                history = [
-                    { sender: 'other', text: 'Hello, how can I help you today? I see you are an automated agent.' },
-                    { sender: 'self', text: 'I need information about my account. I was auto-highlighted after sending this.' },
-                    { sender: 'other', text: 'Certainly! Could you please provide your account number? We are happy to assist.' },
-                    { sender: 'self', text: 'My account number is 987654321. Thank you!' }
-                ];
-            } else if (chatId === 'chat_1') {
-                history = [
-                    { sender: 'other', text: 'Thanks for your message! I will get back to you soon.' },
-                    { sender: 'self', text: 'No problem, thanks for the update.' }
-                ];
-            } else if (chatId === 'chat_4') {
-                history = [
-                    { sender: 'other', text: 'Ticket #500 resolved: New feature deployed successfully.' },
-                    { sender: 'self', text: 'Excellent news! Thanks team.' }
-                ];
-            } else {
-                history = [
-                    { sender: 'other', text: `This is a generic conversation for chat ${chatId}.` },
-                    { sender: 'self', text: 'Testing the chat highlight and display functionality.' }
-                ];
+                // /sessions/{session_id}/whatsapp/chat-history
+                const response = await fetch(`/api/sessions/${encodeURIComponent(sessionId)}/whatsapp/chat-history`, {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const backendResponse = await response.json();
+                console.log("backendResponse",backendResponse)
+                return backendResponse;
+
+            } catch (error) {
+                console.error('Error fetching chat history:', error);
+                return {
+                    success: false,
+                    error: error.message,
+                    chat_history: [],
+                    total_groups: 0,
+                    total_messages: 0
+                };
             }
-
-            return history;
         }
 
 
+
+
+        
+        /**
+         * Clears the chat interface and displays the conversation history for the selected chat.
+         */
+        function flattenChatHistory(backendResponse) {
+            if (!backendResponse.success || !backendResponse.chat_history) {
+                return [];
+            }
+
+            const flatHistory = [];
+
+            // Iterate through each group
+            backendResponse.chat_history.forEach(group => {
+                // Each group is an array of messages
+                group.forEach(msg => {
+                    flatHistory.push({
+                        sender: msg.sender === 'Me' ? 'self' : 'other',
+                        text: msg.message,
+                        time: msg.time,
+                        originalSender: msg.sender
+                    });
+                });
+            });
+
+            return flatHistory;
+        }
+       
+
+
+
+
+        
         // --- Polling Mock Utilities (Updated fetchSessionMessages) ---
         let mockMessageCounter = 0;
 
@@ -844,6 +936,7 @@ async function toggleAgentStatus(agentType) {
 
             if (!response.ok) {
                 throw new Error(`Failed to fetch messages: ${response.status}`);
+
             }
 
             const data = await response.json();
@@ -852,75 +945,97 @@ async function toggleAgentStatus(agentType) {
 
 
 
-async function sessionPolling(session) {
+        async function sessionPolling(session) {
 
-    if (!session.running || session.isPaused) {
-        return;
-    }
+            if (!session.running || session.isPaused) {
+                return;
+            }
 
-    addLiveStatus(session.id, `<span class="text-gray-500">POLL: Starting API check for updates...</span>`);
+            addLiveStatus(session.id, `<span class="text-gray-500">POLL: Starting API check for updates...</span>`);
 
-    try {
+            try {
 
-        // REAL API returns only an array of messages
-        const messages = await fetchSessionMessages(session.id);
-
-
-        if (!Array.isArray(messages) || messages.length === 0) {
-            console.warn(`[sessionPolling] ⚠️ No messages found for session ${session.id}`);
-            addLiveStatus(session.id, `<span class="text-gray-500">POLL: No new messages.</span>`);
-            return;
-        }
-
-        // Take last 3 messages
-        const latestMessages = messages.slice(-3).reverse();
+                // REAL API returns only an array of messages
+                const messages = await fetchSessionMessages(session.id);
 
 
-        for (const msg of latestMessages) {
+                if (!Array.isArray(messages) || messages.length === 0) {
+                    console.warn(`[sessionPolling] ⚠️ No messages found for session ${session.id}`);
+                    addLiveStatus(session.id, `<span class="text-gray-500">POLL: No new messages.</span>`);
+                    return;
+                }
 
-            switch (msg.type) {
-                case "status":
-                    handleStatusMessage(session, msg);
-                    break;
-                case "log":
-                    handleLogMessage(session, msg);
-                    break;
-                case "action":
-                    await handleActionMessage(session, msg);
-                    break;
-                default:
-                    console.warn(`[sessionPolling] Unknown message type`, msg);
+                // Take last 3 messages
+                const latestMessages = messages.slice(-3).reverse();
+
+
+                for (const msg of latestMessages) {
+
+                    switch (msg.type) {
+                        case "status":
+                            handleStatusMessage(session, msg);
+                            break;
+                        case "log":
+                            handleLogMessage(session, msg);
+                            break;
+                        case "action":
+                            await handleActionMessage(session, msg);
+                            break;
+                        default:
+                            console.warn(`[sessionPolling] Unknown message type`, msg);
+                    }
+                }
+
+                // Limit logs
+                if (session.statusLog.length > MAX_STATUS_LOG) {
+                    session.statusLog = session.statusLog.slice(0, MAX_STATUS_LOG);
+                }
+
+                renderDashboard();
+
+                addLiveStatus(session.id, `<span class="text-green-500">POLL: Completed successfully.</span>`);
+
+            } catch (error) {
+                console.error(`[sessionPolling] 🚨 NETWORK ERROR during poll for ${session.id}`, error);
+                addLiveStatus(session.id, `<span class="text-red-500">NETWORK FAILED</span>`);
             }
         }
-
-        // Limit logs
-        if (session.statusLog.length > MAX_STATUS_LOG) {
-            session.statusLog = session.statusLog.slice(0, MAX_STATUS_LOG);
-        }
-
-        renderDashboard();
-
-        addLiveStatus(session.id, `<span class="text-green-500">POLL: Completed successfully.</span>`);
-
-    } catch (error) {
-        console.error(`[sessionPolling] 🚨 NETWORK ERROR during poll for ${session.id}`, error);
-        addLiveStatus(session.id, `<span class="text-red-500">NETWORK FAILED</span>`);
-    }
-}
 
 
         // 🟢 HANDLERS (Unchanged)
         function handleStatusMessage(session, msg) {
-            console.log(`[handleStatusMessage] Handling STATUS message for ${session.id}`, msg);
+            // console.log(`[handleStatusMessage] Handling STATUS message for ${session.id}`, msg);
             const { state, message, progress } = msg.content;
 
             session.status = state?.toUpperCase() || "UNKNOWN";
             session.icon = getStatusIcon(session.status);
             updateLiveSessionStatus(session.id, message, session.icon);
         }
+        function showChat(conversationHistory) {
+            chatHistoryContainer.innerHTML = '';
+            
+            // Store history globally for the sender to update
+            currentChatHistory = conversationHistory || [];
+            
+            if (!conversationHistory || conversationHistory.length === 0) {
+                showEmptyChatState();
+                return;
+            }
+            
+            // Reset classes for chat display mode
+            chatHistoryContainer.className = 'flex-1 overflow-y-auto p-4 space-y-4 flex flex-col';
 
+            // Loop through stored history and render using the new helper
+            currentChatHistory.forEach(msg => { 
+                displayNewMessage(msg.text, msg.sender, false); // Don't scroll until the end
+            });
+            
+            setTimeout(() => {
+                chatHistoryContainer.scrollTop = chatHistoryContainer.scrollHeight;
+            }, 0);
+        }
         function handleLogMessage(session, msg) {
-            console.log(`[handleLogMessage] Handling LOG message for ${session.id}`, msg);
+            // console.log(`[handleLogMessage] Handling LOG message for ${session.id}`, msg);
             const { message, level } = msg.content;
             const levelClass = level === 'WARN' ? 'text-yellow-400' : level === 'ERROR' ? 'text-red-400' : 'text-gray-300';
             const formatted = `<span class="${levelClass}">[${level?.toUpperCase() || "INFO"}] ${message}</span>`;
@@ -933,10 +1048,10 @@ async function sessionPolling(session) {
         }
 
         async function handleActionMessage(session, msg) {
-            console.log(`[handleActionMessage] Handling ACTION message for ${session.id}`, msg);
+            // console.log(`[handleActionMessage] Handling ACTION message for ${session.id}`, msg);
             const { action_type, message, chat_id } = msg.content;
 
-            console.log(`[handleActionMessage] ℹ️ Action detected: ${action_type} - ${message}`);
+            console.log(`[handleActionMessage] ℹ️ Action detected: ${action_type} - ${chat_id}`);
 
             if (action_type === 'CHAT_OPENED') {
                 const chatIdToHighlight = chat_id;
@@ -944,14 +1059,19 @@ async function sessionPolling(session) {
                 // 1. Update the global state
                 highlightedChatId = chatIdToHighlight;
 
+                await fetchChats(window.sessionId);
+
+
                 // 2. Re-render the chat list to apply highlight style
-                updateChatList();
 
                 // 3. Fetch chat history
-                const chatHistory = await mockFetchChatHistory(chatIdToHighlight);
+                console.log("chatIdToHighlight",chatIdToHighlight)
+                const chatHistory = await fetchChatHistory(chatIdToHighlight);
 
                 // 4. Display the chat history
-                showChat(chatHistory);
+                
+                showChat(flattenChatHistory(chatHistory))
+                updateChatList();
 
                 // 5. Log the action completion
                 addLiveStatus(session.id, `<span class="text-yellow-300">ACTION: Chat ${chatIdToHighlight} highlighted and displayed.</span>`);
@@ -1109,32 +1229,7 @@ async function sessionPolling(session) {
             `;
         }
 
-        /**
-         * Clears the chat interface and displays the conversation history for the selected chat.
-         */
-        function showChat(conversationHistory) {
-            chatHistoryContainer.innerHTML = '';
 
-            // Store history globally for the sender to update
-            currentChatHistory = conversationHistory || [];
-
-            if (!conversationHistory || conversationHistory.length === 0) {
-                showEmptyChatState();
-                return;
-            }
-
-            // Reset classes for chat display mode
-            chatHistoryContainer.className = 'flex-1 overflow-y-auto p-4 space-y-4 flex flex-col';
-
-            // Loop through stored history and render using the new helper
-            currentChatHistory.forEach(msg => {
-                displayNewMessage(msg.text, msg.sender, false); // Don't scroll until the end
-            });
-
-            setTimeout(() => {
-                chatHistoryContainer.scrollTop = chatHistoryContainer.scrollHeight;
-            }, 0);
-        }
         async function fetchChats(sessionId) {
             try {
                 const url = `http://127.0.0.1:8000/api/sessions/${encodeURIComponent(sessionId)}/whatsapp/chats`;
@@ -1308,7 +1403,7 @@ async function sessionPolling(session) {
             renderDashboard(); // Initial render of status area
 
             // 3. Start Polling Interval (every 3 seconds)
-            setInterval(() => sessionPolling(currentSession), 3000);
+            setInterval(() => sessionPolling(currentSession), 500);
 
             // 4. Fetch initial mock chat data and render the list
             await fetchChats(window.sessionId);
@@ -1328,6 +1423,7 @@ async function sessionPolling(session) {
 
             // 7. Initialize agent buttons to their default (Paused/Play icon) state
             initializeAgentButtons();
+loadAgentStatus(); // <-- load the backend agent status on page load
 
             // 8. Load persistent settings from localStorage
             loadAgentSettingsFromLocalStorage();

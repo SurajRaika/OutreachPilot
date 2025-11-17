@@ -24,7 +24,9 @@ class BaseAgent:
         self.status = AgentStatus.DISABLED
         self.task: Optional[asyncio.Task] = None
         self.error: Optional[str] = None
+        # numbers are sperated by , , eahc num can be string or num i don't know
         self.list_of_contact=[]
+        # intead of sending the ai genearted msg , we send this message template
         self.messageTemplate=""
         self.ai_instruction=""
     
@@ -167,171 +169,179 @@ class AutoReplyAgent(BaseAgent):
 
 
     async def _run(self):
-        self.session.add_message("status", {"message": "AutoReplyAgent Intisted but not running"})
-        """Main loop: checks unread chats and replies using Gemini API."""
-        try:
-            reply_delay = self.config.get("reply_delay", 2)
-            check_interval = self.config.get("check_interval", 5)
+            self.session.add_message("status", {"message": "AutoReplyAgent Initiated but not running"})
+            """Main loop: checks unread chats and replies using Gemini API."""
+            try:
+                reply_delay = self.config.get("reply_delay", 2)
+                check_interval = self.config.get("check_interval", 5)
 
-            self.session.add_message("log", {
-                "agent": "autoreply",
-                "event": "started",
-                "config": {
-                    "model": self.config.get("model", "gemini-1.5-flash"),
-                    "reply_delay": reply_delay,
-                    "check_interval": check_interval,
-                    "system_instruction": self.config.get("system_instruction", "")
-                }
-            })
+                self.session.add_message("log", {
+                    "agent": "autoreply",
+                    "event": "started",
+                    "config": {
+                        "model": self.config.get("model", "gemini-1.5-flash"),
+                        "reply_delay": reply_delay,
+                        "check_interval": check_interval,
+                        "system_instruction": self.config.get("system_instruction", "")
+                    }
+                })
 
-            from automation_actions import AutomationActions
-            total_chat_msg=None
-            while True:
-                # 🟡 Check if paused or disabled before every iteration
-                if self.status != AgentStatus.ENABLED:
-                    await asyncio.sleep(0.5)
-                    continue
-
-                try:
-                    if total_chat_msg:
-                            history_res = await AutomationActions.extract_and_format_chat_history(self.session)
-                            if history_res.get("total_messages") > total_chat_msg:
-                                # thats means new msg found in the chat 
-                                continue
-                    
-                    # 🔍 Step 1: Find unread chats
-                    result = await AutomationActions.open_unread_chat(self.session)
-
-                    # Check pause state before processing results
+                from automation_actions import AutomationActions
+                total_chat_msg = None
+                current_chat_id = None
+                
+                while True:
+                    # 🟡 Check if paused or disabled before every iteration
                     if self.status != AgentStatus.ENABLED:
+                        await asyncio.sleep(0.5)
                         continue
 
-                    if not result.get("success"):
-                        # ❌ Driver or list error
-
-                        await asyncio.sleep(check_interval)
-                        continue
-
-                    # ✅ Case 1: No unread chats
-                    if not result.get("opened_chat"):
-                        self.session.add_message("log", {
-                            "agent": "autoreply",
-                            "event": "no_unread_chats"
-                        })
-
-                        await asyncio.sleep(check_interval)
-                        continue
-
-                    # ✅ Case 2: There are unread chats
-                    opened_chat = result.get("opened_chat")
-                    # self.session.add_message("log", {
-                    #     "agent": "autoreply",
-                    #     "event": "found_unread_chats",
-                    #     "opened_chat_id": opened_chat.get("id")
-                    # })
-                    self.session.add_message("status", {"message": "unread chat Found and Opening "})
-                    self.session.add_message("action", {"action_type": "highlight_chat","chat_id":opened_chat.get("id")})
-
-
-                    chat_info = opened_chat
-                    if chat_info:   
-
-
-                        if self.status != AgentStatus.ENABLED:
-                            break
-
-                        try:
-                            # Process only one chat
-                            number = chat_info.get("id")
-
+                    try:
+                        # 🔄 Step 0: Check if current open chat has new messages
+                        if current_chat_id and total_chat_msg:
+                            history_res = await AutomationActions.extract_and_format_chat_history(self.session)
+                            self.session.add_message("log", {"total_chat_msg": total_chat_msg,"ccurrent":history_res.get("sender_messages")})
+                            
+                            if history_res.get("success") and history_res.get("sender_messages") > total_chat_msg:
+                               
+                                # 🆕 New messages found in current chat - handle them first
+                                self.session.add_message("status", {"message": "New message in current chat detected"})
                                 
-
-                            self.session.add_message("action", {
-                                "action": "CHAT_OPENED",
-                                "chat_id": number
-                            })
-                            # Wait a bit before replying (respect delay)
-                            for _ in range(int(reply_delay * 10)):  # check every 0.1s
+                                # Update total message count
+                                total_chat_msg = history_res.get("sender_messages")
+                                incoming_message = history_res.get("formatted_text", "")
+                                
+                                # Wait before replying
+                                for _ in range(int(reply_delay * 10)):
+                                    if self.status != AgentStatus.ENABLED:
+                                        break
+                                    await asyncio.sleep(0.1)
+                                
                                 if self.status != AgentStatus.ENABLED:
-                                    break
-                                await asyncio.sleep(0.1)
-                            if self.status != AgentStatus.ENABLED:
-                                break
-                            self.session.add_message("status", {"message": "Generating Reply ......."})
-
-                            # 📝 Step 2: Extract incoming message
-                            history = await AutomationActions.extract_and_format_chat_history(self.session)
-                            total_chat_msg=history.get("total_messages")
-                            if not history.get("success"):
-                                incoming_message = ""
-                            else:
-                                incoming_message = history.get("formatted_text", "")
+                                    continue
                                 
+                                # Generate and send reply
+                                self.session.add_message("status", {"message": "Generating Reply for current chat......."})
+                                reply_message = await self._generate_reply(incoming_message)
+                                
+                                self.session.add_message("status", {"message": f"Writing the msg .......&{reply_message}"})
+                                send_result = await AutomationActions.SendAndCloseChat(self.session, reply_message)
+                                # when i add this , it update the chat ui in cleint 
+                                self.session.add_message("action", {
+                                    "action_type": "CHAT_OPENED",
+                                    "chat_id": current_chat_id
+                                })
+                                # After sending, continue to check for more messages
+                                continue
+                        
+                        # 🔍 Step 1: Find unread chats (this will open other chats with unread messages)
+                        result = await AutomationActions.open_unread_chat(self.session)
 
-                            # Wait before replying
-
-                            # 🤖 Step 2: Generate reply using Gemini API
-                            reply_message = await self._generate_reply(incoming_message)
-
-                            # 💬 Step 3: Send and close chat
-                            self.session.add_message("status", {"message": "Writing the msg .......&{{reply_message}}"})
-
-                            send_result = await AutomationActions.SendAndCloseChat(
-                                self.session,  reply_message
-                            )
-
-                            # self.session.add_message("log", {
-                            #     "agent": "autoreply",
-                            #     "action": "reply_sent",
-                            #     "contact": contact,
-                            #     "number": number,
-                            #     "incoming_message": incoming_message,
-                            #     "generated_reply": reply_message,
-                            #     "result": send_result
-                            # })
-
-                        except Exception as e:
-                            self.session.add_message("error", {
-                                "agent": "autoreply",
-                                "action": "reply_chat",
-                                "error": str(e)
-                            })
+                        # Check pause state before processing results
+                        if self.status != AgentStatus.ENABLED:
                             continue
 
-                    # 🕒 Wait between cycles with pause-awareness
-                    for _ in range(int(check_interval * 10)):  # check every 0.1s
-                        if self.status != AgentStatus.ENABLED:
-                            break
-                        await asyncio.sleep(0.1)
+                        if not result.get("success"):
+                            # ❌ Driver or list error
+                            await asyncio.sleep(check_interval)
+                            continue
 
-                except asyncio.CancelledError:
-                    break
-                except Exception as e:
-                    self.error = str(e)
-                    self.status = AgentStatus.ERROR
-                    self.session.add_message("error", {
-                        "agent": "autoreply",
-                        "error": str(e)
-                    })
-                    await asyncio.sleep(5)
+                        # ✅ Case 1: No unread chats
+                        if not result.get("opened_chat"):
+                            self.session.add_message("log", {
+                                "agent": "autoreply",
+                                "event": "no_unread_chats"
+                            })
+                            
+                            # Reset current chat tracking
+                            current_chat_id = None
+                            total_chat_msg = None
+                            
+                            await asyncio.sleep(check_interval)
+                            continue
 
-        except asyncio.CancelledError:
-            pass
-        finally:
-            self.session.add_message("log", {
-                "agent": "autoreply",
-                "event": "stopped"
-            })
+                        # ✅ Case 2: There are unread chats
+                        opened_chat = result.get("opened_chat")
+                        chat_info = opened_chat
+                        
+                        if chat_info:   
+                            if self.status != AgentStatus.ENABLED:
+                                break
 
+                            try:
+                                # Process the newly opened chat
+                                number = chat_info.get("id")
+                                current_chat_id = number  # Track the current chat
+                                
+                                self.session.add_message("status", {"message": "unread chat Found and Opening"})
+                                self.session.add_message("action", {"action_type": "highlight_chat", "chat_id": number})
+                                self.session.add_message("action", {
+                                    "action_type": "CHAT_OPENED",
+                                    "chat_id": number
+                                })
+                                
+                                # Wait a bit before replying (respect delay)
+                                for _ in range(int(reply_delay * 10)):
+                                    if self.status != AgentStatus.ENABLED:
+                                        break
+                                    await asyncio.sleep(0.1)
+                                
+                                if self.status != AgentStatus.ENABLED:
+                                    break
+                                
+                                self.session.add_message("status", {"message": "Generating Reply......."})
 
+                                # 📝 Step 2: Extract incoming message
+                                history = await AutomationActions.extract_and_format_chat_history(self.session)
+                                total_chat_msg = history.get("sender_messages")
+                                
+                                if not history.get("success"):
+                                    incoming_message = ""
+                                else:
+                                    incoming_message = history.get("formatted_text", "")
 
+                                # 🤖 Step 3: Generate reply using Gemini API
+                                reply_message = await self._generate_reply(incoming_message)
 
+                                # 💬 Step 4: Send and close chat
+                                self.session.add_message("status", {"message": f"Writing the msg .......&{reply_message}"})
+                                send_result = await AutomationActions.SendAndCloseChat(self.session, reply_message)
 
+                            except Exception as e:
+                                self.session.add_message("error", {
+                                    "agent": "autoreply",
+                                    "action": "reply_chat",
+                                    "error": str(e)
+                                })
+                                # Reset current chat on error
+                                current_chat_id = None
+                                total_chat_msg = None
+                                continue
 
+                        # 🕒 Wait between cycles with pause-awareness
+                        for _ in range(int(check_interval * 10)):
+                            if self.status != AgentStatus.ENABLED:
+                                break
+                            await asyncio.sleep(0.1)
 
+                    except asyncio.CancelledError:
+                        break
+                    except Exception as e:
+                        self.error = str(e)
+                        self.status = AgentStatus.ERROR
+                        self.session.add_message("error", {
+                            "agent": "autoreply",
+                            "error": str(e)
+                        })
+                        await asyncio.sleep(5)
 
-
-
+            except asyncio.CancelledError:
+                pass
+            finally:
+                self.session.add_message("log", {
+                    "agent": "autoreply",
+                    "event": "stopped"
+                })
 
 
 
@@ -349,135 +359,256 @@ class AutoOutreachAgent(BaseAgent):
     
     Config example:
     {
-        "contacts_list": ["contact1", "contact2"],
-        "outreach_message": "Hi! Check out our product...",
-        "delay_between_messages": 10,
-        "daily_limit": 50,
-        "daily_reset_hour": 0
+        "message_delay": 3,
+        "contacts": ["1234567890", "0987654321"],
+        "message_template": "Hi {name}, this is an automated message!",
+        "gemini_api_key": "your-api-key",
+        "ai_instruction": "Generate a personalized outreach message",
+        "use_ai": False,
+        "campaign_interval": 60,
+        "max_messages_per_cycle": 10
     }
     """
     
     def __init__(self, session: "AutomationSession", config: dict = None):
         super().__init__(AgentType.AUTO_OUTREACH, config)
         self.session = session
-        self.messages_sent_today = 0
+        self.sent_contacts = set()  # Track already contacted numbers
+        self.current_index = 0
+        
+    async def _generate_personalized_message(self, contact: str, template: str) -> str:
+        """Generate AI-personalized message or use template"""
+        
+        use_ai = self.config.get("use_ai", False)
+        
+        if not use_ai:
+            # Simply use the template as-is or with basic formatting
+            return template.replace("{contact}", contact)
+        
+        API_KEY = self.config.get("gemini_api_key")
+        
+        if not API_KEY:
+            self.session.add_message("error", {
+                "agent": "auto_outreach",
+                "action": "initialize_gemini",
+                "error": "gemini_api_key is required when use_ai is True"
+            })
+            return template.replace("{contact}", contact)
+        
+        ai_instruction = self.config.get("ai_instruction", "")
+        
+        try:
+            prompt = f"{ai_instruction}\n\nContact: {contact}\nTemplate: {template}\n\nGenerate a personalized message:"
+            reply = get_chat_reply(prompt, ai_instruction, API_KEY)
+            return reply
+        except Exception as e:
+            self.session.add_message("error", {
+                "agent": "auto_outreach",
+                "action": "generate_message",
+                "error": str(e)
+            })
+            return template.replace("{contact}", contact)
     
     async def _run(self):
-        """Run auto-outreach agent"""
+        """Main loop: sends outreach messages to contacts"""
         try:
-            # Import here to avoid circular dependency
-            from automation_actions import AutomationActions
+            message_delay = self.config.get("message_delay", 3)
+            campaign_interval = self.config.get("campaign_interval", 60)
+            max_messages = self.config.get("max_messages_per_cycle", 10)
+            contacts = self.list_of_contact
+            message_template = self.messageTemplate
             
-            contacts_list = self.config.get("contacts_list", [])
-            outreach_message = self.config.get("outreach_message", "Hello!")
-            delay_between = self.config.get("delay_between_messages", 10)
-            daily_limit = self.config.get("daily_limit", 50)
-            
-            if not contacts_list:
-                # self.session.add_message("log", {
-                #     "agent": "auto_outreach",
-                #     "event": "no_contacts",
-                #     "message": "No contacts in list"
-                # })
+            if not contacts:
+                self.session.add_message("error", {
+                    "agent": "auto_outreach",
+                    "error": "No contacts provided in config"
+                })
+                self.status = AgentStatus.ERROR
                 return
             
-            # self.session.add_message("log", {
-            #     "agent": "auto_outreach",
-            #     "event": "started",
-            #     "total_contacts": len(contacts_list),
-            #     "daily_limit": daily_limit
-            # })
+            if not message_template:
+                self.session.add_message("error", {
+                    "agent": "auto_outreach",
+                    "error": "No message_template provided in config"
+                })
+                self.status = AgentStatus.ERROR
+                return
             
-            for contact in contacts_list:
+            self.session.add_message("log", {
+                "agent": "auto_outreach",
+                "event": "started",
+                "config": {
+                    "total_contacts": len(contacts),
+                    "message_delay": message_delay,
+                    "campaign_interval": campaign_interval,
+                    "use_ai": self.config.get("use_ai", False)
+                }
+            })
+            
+            from automation_actions import AutomationActions
+            
+            while True:
+                # Check if paused or disabled
                 if self.status != AgentStatus.ENABLED:
-                    break
+                    await asyncio.sleep(0.5)
+                    continue
                 
                 try:
-                    if self.messages_sent_today >= daily_limit:
-                        # self.session.add_message("log", {
-                        #     "agent": "auto_outreach",
-                        #     "event": "daily_limit_reached",
-                        #     "count": self.messages_sent_today
-                        # })
-                        break
+                    messages_sent_this_cycle = 0
                     
-                    result = await AutomationActions.send_message(
-                        self.session, 
-                        contact, 
-                        outreach_message
-                    )
+                    # Process contacts in batches
+                    for contact in contacts:
+                        # Check pause state before each message
+                        if self.status != AgentStatus.ENABLED:
+                            break
+                        
+                        # Skip already contacted numbers
+                        if contact in self.sent_contacts:
+                            continue
+                        
+                        # Check max messages per cycle limit
+                        if messages_sent_this_cycle >= max_messages:
+                            self.session.add_message("log", {
+                                "agent": "auto_outreach",
+                                "event": "cycle_limit_reached",
+                                "messages_sent": messages_sent_this_cycle
+                            })
+                            break
+                        
+                        try:
+                            # Open chat with contact
+                            self.session.add_message("status", {
+                                "message": f"Opening chat with {contact}"
+                            })
+                            
+                            open_result = await AutomationActions.IntializenewChat(
+                                self.session, 
+                                contact
+                            )
+                            
+                            if not open_result.get("success"):
+                                self.session.add_message("error", {
+                                    "agent": "auto_outreach",
+                                    "action": "open_chat",
+                                    "contact": contact,
+                                    "error": open_result.get("error", "Failed to open chat")
+                                })
+                                continue
+                            
+                            # Highlight the chat in UI
+                            self.session.add_message("action", {
+                                "action_type": "CHAT_OPENED",
+                                "chat_id": "chat_0"
+                            })
+                            
+                            # Wait before sending
+                            for _ in range(int(message_delay * 10)):
+                                if self.status != AgentStatus.ENABLED:
+                                    break
+                                await asyncio.sleep(0.1)
+                            
+                            if self.status != AgentStatus.ENABLED:
+                                break
+                            
+                            # Generate personalized message
+                            self.session.add_message("status", {
+                                "message": f"Generating message for {contact}"
+                            })
+                            
+                            outreach_message = await self._generate_personalized_message(
+                                contact, 
+                                message_template
+                            )
+                            
+                            # Send message
+                            self.session.add_message("status", {
+                                "message": f"Sending message to {contact}"
+                            })
+                            
+                            send_result = await AutomationActions.SendAndCloseChat(
+                                self.session, 
+                                outreach_message
+                            )
+                            
+                            if send_result.get("success"):
+                                self.sent_contacts.add(contact)
+                                messages_sent_this_cycle += 1
+                                
+                                self.session.add_message("log", {
+                                    "agent": "auto_outreach",
+                                    "event": "message_sent",
+                                    "contact": contact,
+                                    "total_sent": len(self.sent_contacts)
+                                })
+                                self.session.add_message("action", {
+                                "action_type": "CHAT_OPENED",
+                                "chat_id": "chat_0"
+                            })
+                            else:
+                                self.session.add_message("error", {
+                                    "agent": "auto_outreach",
+                                    "action": "send_message",
+                                    "contact": contact,
+                                    "error": send_result.get("error", "Failed to send")
+                                })
+                            
+                            # Wait between contacts
+                            for _ in range(int(message_delay * 10)):
+                                if self.status != AgentStatus.ENABLED:
+                                    break
+                                await asyncio.sleep(0.1)
+                            
+                        except Exception as e:
+                            self.session.add_message("error", {
+                                "agent": "auto_outreach",
+                                "action": "process_contact",
+                                "contact": contact,
+                                "error": str(e)
+                            })
+                            continue
                     
-                    # self.session.add_message("log", {
-                    #     "agent": "auto_outreach",
-                    #     "action": "message_sent",
-                    #     "contact": contact,
-                    #     "success": result.get("success")
-                    # })
+                    # Check if all contacts have been processed
+                    if len(self.sent_contacts) >= len(contacts):
+                        self.session.add_message("log", {
+                            "agent": "auto_outreach",
+                            "event": "campaign_completed",
+                            "total_contacts": len(contacts),
+                            "successfully_sent": len(self.sent_contacts)
+                        })
+                        
+                        # Reset for next campaign cycle (optional)
+                        # self.sent_contacts.clear()
                     
-                    if result.get("success"):
-                        self.messages_sent_today += 1
+                    # Wait before next cycle
+                    self.session.add_message("status", {
+                        "message": f"Waiting {campaign_interval}s before next cycle"
+                    })
                     
-                    await asyncio.sleep(delay_between)
-                    
+                    for _ in range(int(campaign_interval * 10)):
+                        if self.status != AgentStatus.ENABLED:
+                            break
+                        await asyncio.sleep(0.1)
+                    self.stop()
+                
                 except asyncio.CancelledError:
                     break
                 except Exception as e:
+                    self.error = str(e)
+                    self.status = AgentStatus.ERROR
                     self.session.add_message("error", {
                         "agent": "auto_outreach",
-                        "contact": contact,
                         "error": str(e)
                     })
-                    continue
+                    await asyncio.sleep(5)
         
         except asyncio.CancelledError:
             pass
-        except Exception as e:
-            self.error = str(e)
-            self.status = AgentStatus.ERROR
-            self.session.add_message("error", {
-                "agent": "auto_outreach",
-                "error": str(e)
-            })
         finally:
             self.session.add_message("log", {
                 "agent": "auto_outreach",
                 "event": "stopped",
-                "messages_sent": self.messages_sent_today
+                "total_sent": len(self.sent_contacts)
             })
-    
-    async def add_contacts(self, contacts: list):
-        """Add more contacts to outreach list"""
-        try:
-            current = self.config.get("contacts_list", [])
-            self.config["contacts_list"] = current + contacts
-            
-            self.session.add_message("log", {
-                "agent": "auto_outreach",
-                "action": "contacts_added",
-                "count": len(contacts),
-                "total": len(self.config["contacts_list"])
-            })
-        except Exception as e:
-            self.session.add_message("error", {
-                "agent": "auto_outreach",
-                "action": "add_contacts",
-                "error": str(e)
-            })
-    
-    def get_stats(self) -> dict:
-        """Get outreach statistics"""
-        return {
-            "messages_sent_today": self.messages_sent_today,
-            "daily_limit": self.config.get("daily_limit", 50),
-            "total_contacts": len(self.config.get("contacts_list", [])),
-            "status": self.status.value
-        }
-
-
-
-
-
-
 
 
 

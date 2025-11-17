@@ -45,7 +45,7 @@ class AutomationSession:
                 self.agents[agent_type] = AutoReplyAgent(self,{
     "reply_delay": 2,
     "check_interval": 5,
-    "gemini_api_key": "",
+    "gemini_api_key": "AIzaSyBmX1jEygYWngFlDX22Fb0_Vovy0HLRQzU",
     "system_instruction": "You are a helpful customer service bot. Keep responses friendly and concise.",
     "model": "gemini-1.5-flash",
 })
@@ -121,6 +121,8 @@ class AutomationSession:
     
     # Updated enable_agent method in the session manager (if needed)
     async def enable_agent(self, agent_type: AgentType, list_of_contact: List[str] = [], messageTemplate: str = "", ai_instruction: str = ""):
+
+        
         """Enable an agent with optional configuration"""
         try:
             # Create or retrieve the agent

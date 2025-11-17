@@ -12,6 +12,12 @@
         xintegrity="sha512-SnH5WK+bZxgPHs44uWIX+LLMDJ8g2YJTIy2E/lKScVq4F3f9G5bQx2T/Bw2tI8g1e/Q71W+I4G9Fh7G9C0Q=="
         crossorigin="anonymous" referrerpolicy="no-referrer" />
     <style>
+
+
+.glow {
+  box-shadow: 0 0 10px #00ff00, 0 0 20px #00ff00, 0 0 30px #00ff00;
+  transition: box-shadow 0.3s ease-in-out;
+}
         /* Setup for Inter font and light theme body styles */
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap');
 
@@ -636,6 +642,9 @@ async function handleActionMessage(session, msg) {
     else if(action_type === "HIDE_QR"){
         hideQrCode(session.id)
     }
+    else if(action_type === "SHOW_ADVANCE"){
+    window.open(`session.html?id=${session.id}`, '_blank');
+    }
     else {
         console.log(`[handleActionMessage] ℹ️ Non-QR action detected: ${action_type}`);
     }
@@ -1082,7 +1091,7 @@ function startStatusPolling(id) {
 
     statusPollIntervals[id] = setInterval(async () => {
         try {
-            const url = `/sessions/${id}/whatsapp/status?state=logged_in`;
+            const url = `/api/sessions/${id}/whatsapp/status?state=logged_in`;
             console.log("Requesting:", url);
 
             const res = await fetch(url);
@@ -1274,10 +1283,10 @@ const statusLogHTML = (session.statusLog || [])
                                 <i class="fa-solid ${chevronIconClass}" id="chevron-icon-${session.id}"></i>
                             </button>   <!-- More Options Button -->
  <!-- More Options Button -->
-    <button onclick="window.location.href='session.html?id=${session.id}'"
+    <button id="manage_sessionButton" session-id="'session.html?id=${session.id}'" onclick="window.location.href='session.html?id=${session.id}'"
         class="action-btn bg-white text-gray-700 border border-gray-400 hover:bg-gray-100"
         title="Manage Session">
-        <i class="fas fa-ellipsis-h text-sm"></i>
+        <i class="fas fa-cog  text-sm"></i>
     </button>
                         `;
 

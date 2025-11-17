@@ -177,6 +177,9 @@ class AutomationActions:
                         EC.presence_of_element_located((By.CSS_SELECTOR, "span[data-icon='new-chat-outline']"))
                     )
                     session.add_message("status", {"message": "User logged in"})
+                    session.add_message("action", {"action_type": "SHOW_ADVANCE"})
+
+                    
                     return {"success": True, "state": "logged_in"}
                 except TimeoutException:
                     pass
@@ -332,63 +335,114 @@ class AutomationActions:
             except Exception as e:
                 return {"success": False, "error": f"Exception: {e}"}
 
-
-
-
         @staticmethod
         async def CloseCurrentChat(session) -> dict:
-            """
-            Closes the currently open WhatsApp chat.
+                """
+                Closes the currently open WhatsApp chat with multiple fallback strategies.
 
-            Steps:
-            1. Find the chat input area to locate a known chat region.
-            2. Move slightly above it and right-click to open the chat context menu.
-            3. Wait 1 second, press the down arrow 6 times, wait 1 second, and press Enter to close the chat.
-            """
-            try:
-                driver = session.driver
-                if not driver:
-                    return {"success": False, "error": "Driver not initialized"}
+                Steps:
+                1. Check if chat is already closed by looking for input box
+                2. Try context menu method with different Y offsets
+                3. Try ESC key multiple times
+                4. Combine strategies until chat is confirmed closed
+                """
+                try:
+                    driver = session.driver
+                    if not driver:
+                        return {"success": False, "error": "Driver not initialized"}
 
-                # ✅ Wait for chat input (base element to calculate offset)
-                target_element = WebDriverWait(driver, 10).until(
-                    EC.presence_of_element_located((
-                        By.CSS_SELECTOR,
-                        "div[contenteditable='true'][aria-placeholder='Type a message']"
-                    ))
-                )
+                    max_attempts = 5
+                    y_offsets = [-100, -150, -80, -120, -200]
+                    
+                    for attempt in range(max_attempts):
+                        # ✅ Check if chat is already closed
+                        try:
+                            input_box = WebDriverWait(driver, 2).until(
+                                EC.presence_of_element_located((
+                                    By.CSS_SELECTOR,
+                                    "div[contenteditable='true'][aria-placeholder='Type a message']"
+                                ))
+                            )
+                            # Chat is still open, continue trying to close it
+                        except:
+                            # Input box not found - chat is closed!
+                            session.add_message("log", {"action": "close_chat", "state": "closed", "attempts": attempt + 1})
+                            return {"success": True, "state": "chat_closed", "attempts": attempt + 1}
 
-                # ✅ Move slightly above and right-click to open context menu
-                X_OFFSET = 0
-                Y_OFFSET = -100
-                actions = ActionChains(driver)
-                actions.move_to_element_with_offset(target_element, X_OFFSET, Y_OFFSET)
-                actions.context_click().perform()
+                        # Strategy 1: Context menu method (attempts 0-2)
+                        if attempt < 3:
+                            try:
+                                target_element = WebDriverWait(driver, 3).until(
+                                    EC.presence_of_element_located((
+                                        By.CSS_SELECTOR,
+                                        "div[contenteditable='true'][aria-placeholder='Type a message']"
+                                    ))
+                                )
 
-                # ✅ Wait for menu to open
-                await asyncio.sleep(1)
+                                # Use different Y offset for each attempt
+                                X_OFFSET = 0
+                                Y_OFFSET = y_offsets[attempt]
+                                
+                                actions = ActionChains(driver)
+                                actions.move_to_element_with_offset(target_element, X_OFFSET, Y_OFFSET)
+                                actions.context_click().perform()
 
-                # ✅ Press Down Arrow 6 times
-                actions = ActionChains(driver)
-                for _ in range(6):
-                    actions.send_keys(Keys.ARROW_DOWN)
-                actions.perform()
+                                await asyncio.sleep(1)
 
-                await asyncio.sleep(1)
+                                # Press Down Arrow 6 times
+                                actions = ActionChains(driver)
+                                for _ in range(6):
+                                    actions.send_keys(Keys.ARROW_DOWN)
+                                actions.perform()
 
-                # ✅ Press Enter to select the option
-                actions = ActionChains(driver)
-                actions.send_keys(Keys.ENTER).perform()
+                                await asyncio.sleep(1)
 
-                await asyncio.sleep(0.5)
+                                # Press Enter
+                                actions = ActionChains(driver)
+                                actions.send_keys(Keys.ENTER).perform()
 
-                session.add_message("log", {"action": "close_chat", "state": "closed"})
-                return {"success": True, "state": "chat_closed"}
+                                await asyncio.sleep(1)
+                                
+                            except Exception as e:
+                                session.add_message("log", {"action": "close_chat", "attempt": attempt + 1, "strategy": "context_menu", "error": str(e)})
+                        
+                        # Strategy 2: ESC key method (attempts 3-4)
+                        else:
+                            try:
+                                actions = ActionChains(driver)
+                                # Press ESC multiple times
+                                esc_presses = 3 if attempt == 3 else 5
+                                for _ in range(esc_presses):
+                                    actions.send_keys(Keys.ESCAPE)
+                                actions.perform()
+                                
+                                await asyncio.sleep(1)
+                                
+                            except Exception as e:
+                                session.add_message("log", {"action": "close_chat", "attempt": attempt + 1, "strategy": "esc_key", "error": str(e)})
+                        
+                        # Brief pause before next check
+                        await asyncio.sleep(0.5)
 
-            except Exception as e:
-                session.add_message("error", {"action": "close_chat", "error": str(e)})
-                return {"success": False, "error": str(e)}
+                    # Final check after all attempts
+                    try:
+                        input_box = WebDriverWait(driver, 2).until(
+                            EC.presence_of_element_located((
+                                By.CSS_SELECTOR,
+                                "div[contenteditable='true'][aria-placeholder='Type a message']"
+                            ))
+                        )
+                        # Still open after all attempts
+                        session.add_message("error", {"action": "close_chat", "state": "failed", "attempts": max_attempts})
+                        return {"success": False, "error": "Failed to close chat after all attempts"}
+                    except:
+                        # Successfully closed
+                        session.add_message("log", {"action": "close_chat", "state": "closed", "attempts": max_attempts})
+                        return {"success": True, "state": "chat_closed", "attempts": max_attempts}
 
+                except Exception as e:
+                    session.add_message("error", {"action": "close_chat", "error": str(e)})
+                    return {"success": False, "error": str(e)}
 
 
 
@@ -398,29 +452,26 @@ class AutomationActions:
             Initiates a WhatsApp chat, sends a message with retry, and closes the chat.
             Retries sending message up to 3 times if it fails.
             """
-
             results = {
                 "initialize": None,
                 "send": None,
                 "close": None
             }
 
-            max_attempts = 3
             send_result = None
 
             try:
+                # Step 1️⃣: Send the message with retry
+                session.add_message("log", {"action": "send_message",  "state": "attempting"})
+                
+                send_result = await AutomationActions.SendMessage(session, msg)
+                results["send"] = send_result
 
-                # Step 2️⃣: Send the message with retry
-                for attempt in range(1, max_attempts + 1):
-                    send_result = await AutomationActions.SendMessage(session, msg)
-                    results["send"] = send_result
-
-                    if send_result.get("success"):
-                        session.add_message("log", {"action": "send_message", "attempt": attempt, "state": "success"})
-                        break  # Stop retry loop
-                    else:
-                        session.add_message("warning", {"action": "send_message", "attempt": attempt, "state": "failed"})
-                        await asyncio.sleep(1)  # optional backoff delay
+                if send_result.get("success"):
+                    session.add_message("log", {"action": "send_message", "state": "success"})
+                else:
+                    session.add_message("warning", {"action": "send_message", "state": "failed", "error": send_result.get("error")})
+                    
 
                 # If after all attempts still failed
                 if not send_result or not send_result.get("success"):
@@ -429,24 +480,11 @@ class AutomationActions:
                         "step": "send_message",
                         "details": send_result,
                         "error": send_result.get("error", "Message not sent after retries"),
-                        "attempts": max_attempts
                     }
 
                 session.add_message("log", {"action": "sequence", "step": "message_sent"})
 
-                # Step 3️⃣: Close the chat
-                close_result = await AutomationActions.CloseCurrentChat(session)
-                results["close"] = close_result
-
-                if not close_result.get("success"):
-                    return {
-                        "success": False,
-                        "step": "close_chat",
-                        "details": close_result,
-                        "error": close_result.get("error", "Failed to close chat")
-                    }
-
-                session.add_message("log", {"action": "sequence", "step": "chat_closed"})
+    
 
                 # ✅ Complete
                 return {
@@ -463,8 +501,6 @@ class AutomationActions:
                     "error": str(e),
                     "steps": results
                 }
-
-
 
 
         @staticmethod
@@ -576,10 +612,7 @@ class AutomationActions:
                         })
                         continue
                 
-                session.add_message("log", {
-                    "message": f"Retrieved {len(chats)} chats",
-                    "chat_count": len(chats)
-                })
+                
                 
                 return {
                     "success": True,
@@ -693,14 +726,7 @@ class AutomationActions:
                 # Verify unread IDs exist in all chats
                 missing_ids = [uid for uid in unread_ids if uid not in all_ids]
                 
-                session.add_message("log", {
-                    "message": "Chat ID verification completed",
-                    "total_chats": len(all_ids),
-                    "unread_chats": len(unread_ids),
-                    "missing_ids": missing_ids,
-                    "all_consistent": len(missing_ids) == 0
-                })
-                
+         
                 return {
                     "success": True,
                     "all_chat_ids": all_ids,
@@ -715,6 +741,9 @@ class AutomationActions:
                     "error": str(e)
                 })
                 return {"success": False, "error": str(e)}
+
+
+
 
         @staticmethod
         async def open_unread_chat(session: "AutomationSession", click_delay: float = 1.0, verify_ids: bool = True) -> dict:
@@ -737,7 +766,6 @@ class AutomationActions:
                     
                     # Verify chat IDs consistency if requested
                     if verify_ids:
-                        session.add_message("log", {"message": "Verifying chat IDs before opening unread chat..."})
                         verification = await AutomationActions.verify_chat_ids(session)
                         if not verification["success"]:
                             session.add_message("warning", {"message": "Chat ID verification failed, proceeding anyway"})
@@ -847,14 +875,7 @@ class AutomationActions:
                                 )
                                 row.click()
                                 
-                                # Log the opened chat with ID
-                                session.add_message("action", {
-                                    "action_type": "CHAT_OPENED",
-                                    "chat_id": chat_id,
-                                    "chat_title": title,
-                                    "unread_count": unread_count,
-                                    "message": f"Opened unread chat: {title} (ID: {chat_id}) - {unread_count} unread message(s)"
-                                })
+                             
                                 
                                 # Wait before returning
                                 await asyncio.sleep(click_delay)
@@ -901,7 +922,7 @@ class AutomationActions:
             Returns grouped messages with sender, message text, and timestamp.
             
             Returns:
-                dict with success status and grouped chat history
+                dict with success status, grouped chat history, and message counts
             """
             try:
                 if not session.driver:
@@ -910,6 +931,11 @@ class AutomationActions:
                 
                 # Array to hold the final output: an array of message groups
                 grouped_chat_history = []
+                
+                # Counters for different message types
+                total_messages = 0
+                my_messages = 0
+                sender_messages = 0
                 
                 # 1. Target all elements that bundle messages together (the groups)
                 try:
@@ -935,7 +961,9 @@ class AutomationActions:
                                     "time": "N/A"
                                 }]],
                                 "total_groups": 1,
-                                "total_messages": 1
+                                "total_messages": 1,
+                                "my_messages": 0,
+                                "sender_messages": 0
                             }
                     except NoSuchElementException:
                         pass
@@ -947,10 +975,10 @@ class AutomationActions:
                         "success": True,
                         "chat_history": [],
                         "total_groups": 0,
-                        "total_messages": 0
+                        "total_messages": 0,
+                        "my_messages": 0,
+                        "sender_messages": 0
                     }
-                
-                total_messages = 0
                 
                 # Iterate through each message group container
                 for group_index, group_container in enumerate(group_containers):
@@ -964,11 +992,13 @@ class AutomationActions:
                             try:
                                 sender = "Unknown"
                                 timestamp = "Time Not Found"
+                                is_my_message = False
                                 
                                 # Determine the sender based on the message bubble class
                                 class_list = container.get_attribute('class')
                                 if 'message-out' in class_list:
                                     sender = "My (Outgoing)"
+                                    is_my_message = True
                                 elif 'message-in' in class_list:
                                     sender = "His (Incoming)"
                                 
@@ -1031,7 +1061,13 @@ class AutomationActions:
                                     "message": message_text,
                                     "time": timestamp
                                 })
+                                
+                                # Update counters
                                 total_messages += 1
+                                if is_my_message:
+                                    my_messages += 1
+                                else:
+                                    sender_messages += 1
                                 
                             except Exception as e:
                                 session.add_message("error", {
@@ -1047,20 +1083,23 @@ class AutomationActions:
                             grouped_chat_history.append(group_messages)
                             
                     except Exception as e:
-
                         continue
                 
                 session.add_message("log", {
-                    "message": f"Extracted chat history: {len(grouped_chat_history)} groups, {total_messages} messages",
+                    "message": f"Extracted chat history: {len(grouped_chat_history)} groups, {total_messages} total messages ({my_messages} from me, {sender_messages} from sender)",
                     "total_groups": len(grouped_chat_history),
-                    "total_messages": total_messages
+                    "total_messages": total_messages,
+                    "my_messages": my_messages,
+                    "sender_messages": sender_messages
                 })
                 
                 return {
                     "success": True,
                     "chat_history": grouped_chat_history,
                     "total_groups": len(grouped_chat_history),
-                    "total_messages": total_messages
+                    "total_messages": total_messages,
+                    "my_messages": my_messages,
+                    "sender_messages": sender_messages
                 }
                 
             except Exception as e:
@@ -1069,9 +1108,6 @@ class AutomationActions:
                     "error": str(e)
                 })
                 return {"success": False, "error": str(e)}
-
-
-
 
 
         @staticmethod
@@ -1133,10 +1169,12 @@ class AutomationActions:
                 
                 return {
                     "success": True,
-                    "chat_history": result["chat_history"],
                     "formatted_text": formatted_text,
                     "total_groups": result["total_groups"],
-                    "total_messages": result["total_messages"]
+                    "total_messages": result["total_messages"],
+                    "my_messages": result["my_messages"],
+                    "sender_messages": result["sender_messages"]
+
                 }
                 
             except Exception as e:

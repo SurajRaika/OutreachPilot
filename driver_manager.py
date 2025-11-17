@@ -49,7 +49,14 @@ class DriverManager:
 
         chrome_options.add_argument("--no-sandbox")
         chrome_options.add_argument("--disable-dev-shm-usage")
+        chrome_options.add_argument("--disable-session-crashed-bubble")
 
+        prefs = {
+            "profile.exit_type": "Normal",
+            "profile.session_info": {"last_exit_type": "Normal"},
+            "profile.default_content_setting_values.notifications": 2
+        }
+        chrome_options.add_experimental_option("prefs", prefs)
         # Add binary path explicitly
         chrome_options.binary_location = DriverManager.find_chrome_binary()
 
@@ -62,9 +69,7 @@ class DriverManager:
         chrome_options.add_argument("--profile-directory=Default")
 
         # Disable notifications
-        chrome_options.add_experimental_option(
-            "prefs", {"profile.default_content_setting_values.notifications": 2}
-        )
+     
 
         driver = webdriver.Chrome(
             service=Service(ChromeDriverManager().install()),

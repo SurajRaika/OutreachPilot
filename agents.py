@@ -147,7 +147,7 @@ class AutoReplyAgent(BaseAgent):
 
         # System instruction
         system_inst = self.config.get("system_instruction")
-        self.session.add_message("log", {"message": f"System instruction retrieved: {bool(system_inst)}"})
+        # self.session.add_message("log", {"message": f"System instruction retrieved: {bool(system_inst)}"})
 
         try:
             self.session.add_message("log", {"message": "Calling get_chat_reply()..."})
@@ -185,7 +185,7 @@ class AutoReplyAgent(BaseAgent):
             })
 
             from automation_actions import AutomationActions
-
+            total_chat_msg=None
             while True:
                 # 🟡 Check if paused or disabled before every iteration
                 if self.status != AgentStatus.ENABLED:
@@ -193,6 +193,12 @@ class AutoReplyAgent(BaseAgent):
                     continue
 
                 try:
+                    if total_chat_msg:
+                            history_res = await AutomationActions.extract_and_format_chat_history(self.session)
+                            if history_res.get("total_messages") > total_chat_msg:
+                                # thats means new msg found in the chat 
+                                continue
+                    
                     # 🔍 Step 1: Find unread chats
                     result = await AutomationActions.open_unread_chat(self.session)
 
@@ -218,11 +224,11 @@ class AutoReplyAgent(BaseAgent):
 
                     # ✅ Case 2: There are unread chats
                     opened_chat = result.get("opened_chat")
-                    self.session.add_message("log", {
-                        "agent": "autoreply",
-                        "event": "found_unread_chats",
-                        "opened_chat_id": opened_chat.get("id")
-                    })
+                    # self.session.add_message("log", {
+                    #     "agent": "autoreply",
+                    #     "event": "found_unread_chats",
+                    #     "opened_chat_id": opened_chat.get("id")
+                    # })
                     self.session.add_message("status", {"message": "unread chat Found and Opening "})
                     self.session.add_message("action", {"action_type": "highlight_chat","chat_id":opened_chat.get("id")})
 
@@ -255,7 +261,7 @@ class AutoReplyAgent(BaseAgent):
 
                             # 📝 Step 2: Extract incoming message
                             history = await AutomationActions.extract_and_format_chat_history(self.session)
-
+                            total_chat_msg=history.get("total_messages")
                             if not history.get("success"):
                                 incoming_message = ""
                             else:
@@ -491,7 +497,7 @@ class AutoOutreachAgent(BaseAgent):
 
 if __name__ == "__main__":
     # Replace with your actual API key
-    API_KEY = ""
+    API_KEY = "AIzaSyBmX1jEygYWngFlDX22Fb0_Vovy0HLRQzU"
     
     # Example chat history
     chat_history = """User: Hello, how are you?

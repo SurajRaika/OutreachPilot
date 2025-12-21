@@ -203,7 +203,10 @@ class AutoReplyAgent(BaseAgent):
                             self.session.add_message("log", {"total_chat_msg": total_chat_msg,"ccurrent":history_res.get("sender_messages")})
                             
                             if history_res.get("success") and history_res.get("sender_messages") > total_chat_msg:
-                               
+                                self.session.add_message("action", {
+                                                    "action_type": "CHAT_OPENED",
+                                                    "chat_id": current_chat_id
+                                                })
                                 # 🆕 New messages found in current chat - handle them first
                                 self.session.add_message("status", {"message": "New message in current chat detected"})
                                 

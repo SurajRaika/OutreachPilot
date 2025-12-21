@@ -530,6 +530,9 @@
                 console.log("[PAUSE] Agent IS running → Attempting to PAUSE");
 
                 try {
+                    if (agentType === "outreach") {
+                        agentType = "auto_outreach"
+                        }
                     const apiUrl = `/api/sessions/${encodeURIComponent(currentSession.id)}/agents/${agentType}/pause`;
                     console.log("[PAUSE] API URL:", apiUrl);
 
@@ -1047,36 +1050,37 @@ async function loadAgentStatus() {
             addLiveStatus(session.id, formatted);
         }
 
-        async function handleActionMessage(session, msg) {
-            // console.log(`[handleActionMessage] Handling ACTION message for ${session.id}`, msg);
-            const { action_type, message, chat_id } = msg.content;
+      async function handleActionMessage(session, xavir) {
+        xavir=xavir.content;
+    console.log(
+        `[handleActionMessage] ℹ️ Action detected: ${xavir.action_type} - ${xavir.chat_id}`
+    );
 
-            console.log(`[handleActionMessage] ℹ️ Action detected: ${action_type} - ${chat_id}`);
+    if (xavir.action_type === "CHAT_OPENED") {
 
-            if (action_type === 'CHAT_OPENED') {
-                const chatIdToHighlight = chat_id;
+        const chatIdToHighlight = xavir.chat_id;
 
-                // 1. Update the global state
-                highlightedChatId = chatIdToHighlight;
+        highlightedChatId = chatIdToHighlight;
 
-                await fetchChats(window.sessionId);
+        await fetchChats(window.sessionId);
 
+        console.log("chatIdToHighlight", chatIdToHighlight);
 
-                // 2. Re-render the chat list to apply highlight style
+        const chatHistory = await fetchChatHistory(chatIdToHighlight);
 
-                // 3. Fetch chat history
-                console.log("chatIdToHighlight",chatIdToHighlight)
-                const chatHistory = await fetchChatHistory(chatIdToHighlight);
+        showChat(flattenChatHistory(chatHistory));
+        updateChatList();
 
-                // 4. Display the chat history
-                
-                showChat(flattenChatHistory(chatHistory))
-                updateChatList();
+        addLiveStatus(
+            session.id,
+            `<span class="text-yellow-300">ACTION: Chat ${chatIdToHighlight} highlighted and displayed.</span>`
+        );
 
-                // 5. Log the action completion
-                addLiveStatus(session.id, `<span class="text-yellow-300">ACTION: Chat ${chatIdToHighlight} highlighted and displayed.</span>`);
-            }
-        }
+    } else if (xavir.action_type === "NEW_CHAT") {
+        displayNewMessage(xavir.text, "other", true);
+    }
+}
+
 
 
         // --- Message Display and Sending Functions ---
@@ -1232,7 +1236,7 @@ async function loadAgentStatus() {
 
         async function fetchChats(sessionId) {
             try {
-                const url = `http://127.0.0.1:8000/api/sessions/${encodeURIComponent(sessionId)}/whatsapp/chats`;
+                const url = `/api/sessions/${encodeURIComponent(sessionId)}/whatsapp/chats`;
 
                 console.log("Calling real API:", url);
 

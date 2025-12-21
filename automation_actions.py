@@ -123,6 +123,8 @@ class AutomationActions:
                                 By.XPATH,
                                 "//div[contains(@class, 'x1c3i2sq') and text()='Loading your chats']"
                             )
+                            session.add_message("action", {"action_type": "SHOW_ADVANCE"})
+
                             return {"success": True, "state": "loading_chats"}
                         except NoSuchElementException:
                             return {"success": False, "state": "not_found"}
@@ -140,6 +142,8 @@ class AutomationActions:
                                 )
                                 return {"success": False, "state": "loading_chats"}
                             except NoSuchElementException:
+                                session.add_message("action", {"action_type": "SHOW_ADVANCE"})
+
                                 return {"success": True, "state": "logged_in"}
 
                     case _:
@@ -298,6 +302,7 @@ class AutomationActions:
                 return {"success": False, "error": str(e)}
 
 
+
         @staticmethod
         async def SendMessage(session: AutomationSession, msg: str) -> dict:
             try:
@@ -310,30 +315,51 @@ class AutomationActions:
                 except:
                     return {"success": False, "error": "WebDriver session lost"}
 
+                # Locate input box
                 input_box = WebDriverWait(session.driver, 10).until(
                     EC.presence_of_element_located((
                         By.CSS_SELECTOR,
                         "div[contenteditable='true'][aria-placeholder='Type a message']"
                     ))
                 )
+
                 ActionChains(session.driver).move_to_element(input_box).click().perform()
                 input_box.send_keys(msg)
 
+                # ---- METHOD 1: Try clicking Send button ----
                 send_button = session.driver.execute_script("""
                     const input = arguments[0];
                     let parent = input;
-                    for (let i = 0; i < 3; i++) if (parent.parentElement) parent = parent.parentElement;
+                    for (let i = 0; i < 5; i++) {
+                        if (parent.parentElement) parent = parent.parentElement;
+                    }
                     return parent.querySelector("div[role='button'][aria-label='Send']");
                 """, input_box)
 
-                if not send_button:
-                    return {"success": False, "error": "Send button not found"}
+                if send_button:
+                    session.driver.execute_script("arguments[0].click();", send_button)
+                    return {
+                        "success": True,
+                        "state": "message_sent",
+                        "method": "send_button",
+                        "message": msg
+                    }
 
-                session.driver.execute_script("arguments[0].click();", send_button)
-                return {"success": True, "state": "message_sent", "message": msg}
+                # ---- METHOD 2: Fallback to ENTER key ----
+                input_box.send_keys(Keys.ENTER)
+                return {
+                    "success": True,
+                    "state": "message_sent",
+                    "method": "enter_key",
+                    "message": msg
+                }
 
             except Exception as e:
                 return {"success": False, "error": f"Exception: {e}"}
+
+
+
+
 
         @staticmethod
         async def CloseCurrentChat(session) -> dict:
@@ -916,10 +942,14 @@ class AutomationActions:
 
 
         @staticmethod
-        async def extract_chat_history(session: "AutomationSession") -> dict:
+        async def extract_chat_history(session: "AutomationSession", limit: int = 50) -> dict:
             """
             Extract chat history from the currently open WhatsApp chat using Selenium.
             Returns grouped messages with sender, message text, and timestamp.
+            
+            Args:
+                session: AutomationSession object with driver instance
+                limit: Maximum number of recent messages to extract (from bottom). If None, extracts all messages.
             
             Returns:
                 dict with success status, grouped chat history, and message counts
@@ -979,6 +1009,9 @@ class AutomationActions:
                         "my_messages": 0,
                         "sender_messages": 0
                     }
+                
+                # Collect all messages first (to apply limit from bottom)
+                all_messages_flat = []
                 
                 # Iterate through each message group container
                 for group_index, group_container in enumerate(group_containers):
@@ -1056,18 +1089,14 @@ class AutomationActions:
                                 elif sender == "His (Incoming)":
                                     sender = "Other Contact"
                                 
-                                group_messages.append({
+                                message_obj = {
                                     "sender": sender,
                                     "message": message_text,
                                     "time": timestamp
-                                })
+                                }
                                 
-                                # Update counters
-                                total_messages += 1
-                                if is_my_message:
-                                    my_messages += 1
-                                else:
-                                    sender_messages += 1
+                                group_messages.append(message_obj)
+                                all_messages_flat.append(message_obj)
                                 
                             except Exception as e:
                                 session.add_message("error", {
@@ -1085,8 +1114,28 @@ class AutomationActions:
                     except Exception as e:
                         continue
                 
+                # Apply limit from the bottom (most recent messages)
+                if limit is not None and limit > 0:
+                    all_messages_flat = all_messages_flat[-limit:]
+                    
+                    # Rebuild grouped_chat_history with only limited messages
+                    limited_grouped_history = []
+                    for group in grouped_chat_history:
+                        limited_group = [msg for msg in group if msg in all_messages_flat]
+                        if limited_group:
+                            limited_grouped_history.append(limited_group)
+                    
+                    grouped_chat_history = limited_grouped_history
+                    total_messages = len(all_messages_flat)
+                    my_messages = sum(1 for msg in all_messages_flat if msg["sender"] == "Me")
+                    sender_messages = len(all_messages_flat) - my_messages
+                else:
+                    total_messages = len(all_messages_flat)
+                    my_messages = sum(1 for msg in all_messages_flat if msg["sender"] == "Me")
+                    sender_messages = len(all_messages_flat) - my_messages
+                
                 session.add_message("log", {
-                    "message": f"Extracted chat history: {len(grouped_chat_history)} groups, {total_messages} total messages ({my_messages} from me, {sender_messages} from sender)",
+                    "message": f"Extracted chat history: {len(grouped_chat_history)} groups, {total_messages} total messages ({my_messages} from me, {sender_messages} from sender)" + (f" (Limited to last {limit} messages)" if limit else ""),
                     "total_groups": len(grouped_chat_history),
                     "total_messages": total_messages,
                     "my_messages": my_messages,

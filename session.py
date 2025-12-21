@@ -45,7 +45,7 @@ class AutomationSession:
                 self.agents[agent_type] = AutoReplyAgent(self,{
     "reply_delay": 2,
     "check_interval": 5,
-    "gemini_api_key": "AIzaSyBmX1jEygYWngFlDX22Fb0_Vovy0HLRQzU",
+    "gemini_api_key": "",
     "system_instruction": "You are a helpful customer service bot. Keep responses friendly and concise.",
     "model": "gemini-1.5-flash",
 })

@@ -1,6 +1,7 @@
 # AI-Agentic WhatsApp Automation (Self-Hostable)
 
 This is a **self-hostable WhatsApp automation server** built using **FastAPI (Python)** and **Selenium**.
+<img width="1440" height="810" alt="Thumbnail (1)" src="https://github.com/user-attachments/assets/61386c0c-40f7-4b4f-a05d-40ee64337b8c" />
 
 The goal is simple:
 Create a practical, internal tool that lets you automate WhatsApp in a **controlled, AI-driven way**, without over-engineering or pretending this is something it’s not.
